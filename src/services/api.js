@@ -75,13 +75,8 @@ export const labAPI = {
   getTests: (filters = {}) => api.get("/lab/tests", { params: filters }),
   getTestById: (id) => api.get(`/lab/tests/${id}`),
   updateTestStatus: (id, status) => api.put(`/lab/tests/${id}`, { status }),
-  uploadReport: (id, file) => {
-    const formData = new FormData()
-    formData.append("report", file)
-    return api.post(`/lab/tests/${id}/report`, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    })
-  },
+  uploadReport: (id, payload) => api.post(`/lab/tests/${id}/report`, payload),
+  getLabReport: (id) => api.get(`/lab/tests/${id}/report`),
 }
 
 // Pharmacy endpoints

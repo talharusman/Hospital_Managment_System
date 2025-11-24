@@ -23,16 +23,17 @@ export const LabDashboard = () => {
       setLoading(true)
       setError(null)
       const response = await labAPI.getTests()
-      const pending = response.data.filter((t) => t.status === "Pending").length
-      const completed = response.data.filter((t) => t.status === "Completed").length
+      const tests = Array.isArray(response.data) ? response.data : []
+      const pending = tests.filter((t) => t.status?.toLowerCase() === "pending").length
+      const completed = tests.filter((t) => t.status?.toLowerCase() === "completed").length
 
       setStats({
-        totalTests: response.data.length,
+        totalTests: tests.length,
         pendingTests: pending,
         completedTests: completed,
         avgTurnaroundTime: "2 days",
       })
-      setRecentTests(response.data.slice(0, 5))
+      setRecentTests(tests.slice(0, 5))
     } catch (err) {
       const errorMsg = err.response?.data?.message || "Failed to load lab tests"
       setError(errorMsg)
@@ -63,32 +64,47 @@ export const LabDashboard = () => {
     },
   ]
 
+  const formatStatus = (status) => {
+    if (!status) return "-"
+    return status
+      .toString()
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+
+  const statusTone = (status) => {
+    const value = status?.toLowerCase()
+    if (value === "completed") return "bg-(--status-completed-bg) text-(--status-completed-fg)"
+    if (value === "pending") return "bg-(--status-pending-bg) text-(--status-pending-fg)"
+    if (value === "in-progress") return "bg-(--pill-info-bg) text-(--pill-info-fg)"
+    return "bg-muted text-muted-foreground"
+  }
+
   return (
-    <div className="p-8 bg-background min-h-screen">
+    <div className="min-h-screen bg-background p-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-2">Lab Dashboard</h1>
+        <h1 className="mb-2 text-4xl font-bold text-foreground">Lab Dashboard</h1>
         <p className="text-muted-foreground">Manage laboratory tests and reports</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         {statsData.map((stat, idx) => (
           <StatCard key={idx} {...stat} />
         ))}
       </div>
 
-      {/* Recent Tests Table */}
-      <div className="bg-card rounded-lg shadow-lg border border-border overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
         <div className="p-6">
-          <h2 className="text-xl font-semibold text-foreground mb-4">Recent Test Requests</h2>
+          <h2 className="mb-4 text-xl font-semibold text-foreground">Recent Test Requests</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-muted border-b border-border">
-                  <th className="px-6 py-3 text-left font-semibold text-foreground">Patient</th>
-                  <th className="px-6 py-3 text-left font-semibold text-foreground">Test Name</th>
-                  <th className="px-6 py-3 text-left font-semibold text-foreground">Date</th>
-                  <th className="px-6 py-3 text-left font-semibold text-foreground">Status</th>
+                <tr className="bg-muted/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-6 py-3 font-semibold">Patient</th>
+                  <th className="px-6 py-3 font-semibold">Test Name</th>
+                  <th className="px-6 py-3 font-semibold">Date</th>
+                  <th className="px-6 py-3 font-semibold">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -100,15 +116,13 @@ export const LabDashboard = () => {
                   </tr>
                 ) : (
                   recentTests.map((test) => (
-                    <tr key={test.id} className="border-b border-border hover:bg-muted/30 transition">
+                    <tr key={test.id} className="border-b border-border/60 transition hover:bg-muted/40">
                       <td className="px-6 py-4 text-foreground">{test.patientName}</td>
                       <td className="px-6 py-4 text-foreground">{test.testName}</td>
                       <td className="px-6 py-4 text-muted-foreground">{test.date}</td>
                       <td className="px-6 py-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${test.status === "Pending" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}
-                        >
-                          {test.status}
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusTone(test.status)}`}>
+                          {formatStatus(test.status)}
                         </span>
                       </td>
                     </tr>

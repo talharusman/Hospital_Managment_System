@@ -42,14 +42,19 @@ export const LoginPage = () => {
       login(user, token, normalizedRole)
       toast.success("Logged in successfully!")
 
-      // Navigate based on role
-      if (normalizedRole === "admin") navigate("/admin/dashboard")
-      else if (normalizedRole === "doctor") navigate("/doctor/dashboard")
-      else if (normalizedRole === "patient") navigate("/patient/dashboard")
-      else if (normalizedRole === "lab_tech") navigate("/lab/dashboard")
-      else if (normalizedRole === "pharmacist") navigate("/pharmacy/dashboard")
-      else if (normalizedRole === "staff") navigate("/billing/dashboard")
-      else navigate("/")
+      const roleRouteMap = {
+        admin: "/admin/dashboard",
+        doctor: "/doctor/dashboard",
+        patient: "/patient/dashboard",
+        lab_tech: "/lab/dashboard",
+        lab_technician: "/lab/dashboard",
+        "lab technician": "/lab/dashboard",
+        pharmacist: "/pharmacy/dashboard",
+        staff: "/billing/dashboard",
+      }
+
+      const destination = roleRouteMap[normalizedRole]
+      navigate(destination || "/")
     } catch (error) {
       toast.error(error.response?.data?.message || "Login failed")
     } finally {

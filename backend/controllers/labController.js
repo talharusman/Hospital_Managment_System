@@ -24,6 +24,8 @@ const formatTestRequest = (row) => ({
   date: formatDate(row.created_at),
   patientId: row.patient_id,
   patientName: row.patient_name,
+  patientEmail: row.patient_email || null,
+  patientPhone: row.patient_phone || null,
   doctorId: row.doctor_id,
   doctorName: row.doctor_name,
   priority: row.priority || "Normal",
@@ -34,13 +36,15 @@ const formatTestRequest = (row) => ({
 
 const fetchTestRequestById = async (connection, id) => {
   const [[row]] = await connection.query(
-    `SELECT t.id,
+        `SELECT t.id,
             t.test_type,
             t.description,
             t.status,
             t.created_at,
             p.id AS patient_id,
             uPatient.name AS patient_name,
+          uPatient.email AS patient_email,
+          uPatient.phone AS patient_phone,
             d.id AS doctor_id,
             uDoctor.name AS doctor_name,
             NULL AS priority,
@@ -69,13 +73,15 @@ exports.listTestRequests = async (req, res) => {
     connection = await pool.getConnection()
 
     let query =
-       `SELECT t.id,
+        `SELECT t.id,
             t.test_type,
             t.description,
             t.status,
             t.created_at,
             p.id AS patient_id,
             uPatient.name AS patient_name,
+          uPatient.email AS patient_email,
+          uPatient.phone AS patient_phone,
             d.id AS doctor_id,
             uDoctor.name AS doctor_name,
             NULL AS priority,
