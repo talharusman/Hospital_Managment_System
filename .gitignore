@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+dist/
+out/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs and diagnostics
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Tests and coverage
+coverage/
+
+# Miscellaneous
+*.local
+*.swp

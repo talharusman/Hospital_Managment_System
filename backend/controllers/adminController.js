@@ -1,0 +1,328 @@
+const bcrypt = require("bcryptjs")
+const pool = require("../config/database")
+
+const getConnection = async () => {
+  const connection = await pool.getConnection()
+  return connection
+}
+
+exports.getStatistics = async (req, res) => {
+  const connection = await getConnection()
+
+  try {
+    let userCounts = { totalUsers: 0, totalPatients: 0, totalDoctors: 0 }
+    let appointmentCount = { totalAppointments: 0 }
+    let chartRows = []
+
+    try {
+      const [rows] = await connection.query(
+        `SELECT COUNT(*) AS totalUsers,
+                SUM(role = 'patient') AS totalPatients,
+                SUM(role = 'doctor') AS totalDoctors
+         FROM users`
+      )
+
+      const stats = rows[0] || {}
+      userCounts = {
+        totalUsers: Number(stats.totalUsers) || 0,
+        totalPatients: Number(stats.totalPatients) || 0,
+        totalDoctors: Number(stats.totalDoctors) || 0,
+      }
+    } catch (err) {
+      if (err.code !== "ER_NO_SUCH_TABLE") throw err
+    }
+
+    try {
+      const [rows] = await connection.query("SELECT COUNT(*) AS totalAppointments FROM appointments")
+      const stats = rows[0] || {}
+      appointmentCount = {
+        totalAppointments: Number(stats.totalAppointments) || 0
+      }
+    } catch (err) {
+      if (err.code !== "ER_NO_SUCH_TABLE") throw err
+    }
+
+    try {
+      const [rows] = await connection.query(`
+        SELECT YEAR(appointment_date) AS y,
+              MONTH(appointment_date) AS m,
+              DATE_FORMAT(appointment_date, '%b') AS month,
+              COUNT(*) AS appointments
+        FROM appointments
+        WHERE appointment_date >= DATE_SUB(CURDATE(), INTERVAL 5 MONTH)
+        GROUP BY YEAR(appointment_date), MONTH(appointment_date), DATE_FORMAT(appointment_date, '%b')
+        ORDER BY y, m
+      `);
+      chartRows = rows;
+
+    } catch (err) {
+      if (err.code !== "ER_NO_SUCH_TABLE") throw err
+    }
+
+    res.json({
+      totalUsers: userCounts.totalUsers,
+      totalPatients: userCounts.totalPatients,
+      totalDoctors: userCounts.totalDoctors,
+      totalAppointments: appointmentCount.totalAppointments,
+      chartData: chartRows.map((row) => ({ month: row.month, appointments: Number(row.appointments) })),
+    })
+  } catch (error) {
+    res.status(500).json({ message: `Failed to load statistics: ${error.message}`, error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.getUsers = async (req, res) => {
+  const connection = await getConnection()
+
+  try {
+    const [users] = await connection.query(
+      "SELECT id, name, email, role, phone, created_at AS createdAt, updated_at AS updatedAt FROM users ORDER BY created_at DESC"
+    )
+    res.json(users)
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load users", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.getUserById = async (req, res) => {
+  const { id } = req.params
+  const connection = await getConnection()
+
+  try {
+    const [rows] = await connection.query(
+      "SELECT id, name, email, role, phone, created_at AS createdAt, updated_at AS updatedAt FROM users WHERE id = ?",
+      [id]
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load user", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.createUser = async (req, res) => {
+  const { name, email, role, phone, password } = req.body
+
+  if (!name || !email || !role || !password) {
+    return res.status(400).json({ message: "Name, email, role, and password are required" })
+  }
+
+  const connection = await getConnection()
+
+  try {
+    const [existing] = await connection.query("SELECT id FROM users WHERE email = ?", [email])
+
+    if (existing.length > 0) {
+      return res.status(400).json({ message: "Email already in use" })
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+
+    const [result] = await connection.query(
+      "INSERT INTO users (name, email, role, phone, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+      [name, email, role, phone || null, hashedPassword]
+    )
+
+    res.status(201).json({ id: result.insertId, message: "User created successfully" })
+  } catch (error) {
+    res.status(500).json({ message: "Failed to create user", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.updateUser = async (req, res) => {
+  const { id } = req.params
+  const { name, email, role, phone, password } = req.body
+
+  const connection = await getConnection()
+
+  try {
+    const updates = []
+    const params = []
+
+    if (name !== undefined) {
+      updates.push("name = ?")
+      params.push(name)
+    }
+    if (email !== undefined) {
+      updates.push("email = ?")
+      params.push(email)
+    }
+    if (role !== undefined) {
+      updates.push("role = ?")
+      params.push(role)
+    }
+    if (phone !== undefined) {
+      updates.push("phone = ?")
+      params.push(phone)
+    }
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10)
+      updates.push("password = ?")
+      params.push(hashedPassword)
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ message: "No updates provided" })
+    }
+
+    updates.push("updated_at = NOW()")
+
+    params.push(id)
+
+    await connection.query(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, params)
+
+    res.json({ message: "User updated successfully" })
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update user", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.deleteUser = async (req, res) => {
+  const { id } = req.params
+  const connection = await getConnection()
+
+  try {
+    await connection.query("DELETE FROM users WHERE id = ?", [id])
+    res.json({ message: "User deleted successfully" })
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete user", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.getDepartments = async (req, res) => {
+  const connection = await getConnection()
+
+  try {
+    const [departments] = await connection.query(
+      `SELECT d.id,
+              d.name,
+              d.description,
+              d.head_id AS headId,
+              d.created_at AS createdAt,
+              d.created_at AS updatedAt,
+              u.name AS headName,
+              u.email AS headEmail,
+              u.phone AS headPhone
+       FROM departments d
+       LEFT JOIN users u ON d.head_id = u.id
+       ORDER BY d.created_at DESC`
+    )
+
+    res.json(departments)
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load departments", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.createDepartment = async (req, res) => {
+  const { name, description, headId } = req.body
+
+  if (!name) {
+    return res.status(400).json({ message: "Department name is required" })
+  }
+
+  const connection = await getConnection()
+
+  try {
+    const [result] = await connection.query(
+      "INSERT INTO departments (name, description, head_id, created_at) VALUES (?, ?, ?, NOW())",
+      [name, description || null, headId || null]
+    )
+
+    res.status(201).json({ id: result.insertId, message: "Department created successfully" })
+  } catch (error) {
+    res.status(500).json({ message: "Failed to create department", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.updateDepartment = async (req, res) => {
+  const { id } = req.params
+  const { name, description, headId } = req.body
+
+  if (!name) {
+    return res.status(400).json({ message: "Department name is required" })
+  }
+
+  const connection = await getConnection()
+
+  try {
+    await connection.query("UPDATE departments SET name = ?, description = ?, head_id = ? WHERE id = ?", [name, description || null, headId || null, id])
+
+    res.json({ message: "Department updated successfully" })
+  } catch (error) {
+    res.status(500).json({ message: "Failed to update department", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
+
+exports.deleteDepartment = async (req, res) => {
+  const { id } = req.params
+  const connection = await getConnection()
+
+  try {
+    await connection.query("DELETE FROM departments WHERE id = ?", [id])
+    res.json({ message: "Department deleted successfully" })
+  } catch (error) {
+    if (error.code === "ER_ROW_IS_REFERENCED_2") {
+      res.status(409).json({ message: "Cannot delete department that is assigned to doctors" })
+    } else {
+      res.status(500).json({ message: "Failed to delete department", error: error.message })
+    }
+  } finally {
+    connection.release()
+  }
+}
+
+exports.getDepartmentById = async (req, res) => {
+  const { id } = req.params
+  const connection = await getConnection()
+
+  try {
+    const [rows] = await connection.query(
+      `SELECT d.id,
+              d.name,
+              d.description,
+              d.head_id AS headId,
+              d.created_at AS createdAt,
+              d.created_at AS updatedAt,
+              u.name AS headName,
+              u.email AS headEmail,
+              u.phone AS headPhone
+       FROM departments d
+       LEFT JOIN users u ON d.head_id = u.id
+       WHERE d.id = ?`,
+      [id]
+    )
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Department not found" })
+    }
+
+    res.json(rows[0])
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load department", error: error.message })
+  } finally {
+    connection.release()
+  }
+}
