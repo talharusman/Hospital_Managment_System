@@ -48,9 +48,12 @@ export const doctorAPI = {
   getAppointments: (filters = {}) => api.get("/doctor/appointments", { params: filters }),
   getAppointmentById: (id) => api.get(`/doctor/appointments/${id}`),
   updateAppointmentStatus: (id, status) => api.put(`/doctor/appointments/${id}`, { status }),
+  getPrescriptions: () => api.get("/doctor/prescriptions"),
   createPrescription: (data) => api.post("/doctor/prescriptions", data),
+  getPatients: () => api.get("/doctor/patients"),
   getPatientHistory: (patientId) => api.get(`/doctor/patients/${patientId}/history`),
-  updateAvailability: (data) => api.put("/doctor/availability", data),
+  getAvailability: () => api.get("/doctor/availability"),
+  updateAvailability: (availability) => api.put("/doctor/availability", { availability }),
 }
 
 // Patient endpoints

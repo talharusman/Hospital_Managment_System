@@ -47,6 +47,16 @@
   --button-hover: rgba(11, 19, 42, 0.05);
   --button-border: rgba(11, 19, 42, 0.15);
   --button-text-muted: #0b132a;
+  --dashboard-hero-from: var(--brand-gradient-start);
+  --dashboard-hero-to: #4d5dff;
+  --dashboard-hero-highlight: #1d2d60;
+  --appointment-card: rgba(11, 19, 42, 0.04);
+  --appointment-card-border: rgba(11, 19, 42, 0.12);
+  --calendar-day: rgba(11, 19, 42, 0.82);
+  --calendar-day-muted: rgba(11, 19, 42, 0.54);
+  --calendar-outside: rgba(11, 19, 42, 0.32);
+  --calendar-hover-bg: rgba(67, 60, 112, 0.12);
+  --calendar-focus-ring: rgba(15, 30, 70, 0.55);
   --stat-blue-start: #1a2a5f;
   --stat-blue-mid: #23346f;
   --stat-blue-end: #2c3d80;
@@ -79,6 +89,18 @@
   --status-scheduled-fg: #1d3f91;
   --status-completed-bg: rgba(76, 195, 138, 0.18);
   --status-completed-fg: #1b5a3c;
+  --status-cancelled-bg: rgba(197, 68, 68, 0.18);
+  --status-cancelled-fg: #7d2f2f;
+  --action-success: var(--stat-green-mid);
+  --action-success-hover: var(--stat-green-end);
+  --action-success-foreground: #f4fff7;
+  --action-danger: var(--stat-red-mid);
+  --action-danger-hover: var(--stat-red-end);
+  --action-danger-foreground: #fff5f5;
+  --action-disabled-bg: color-mix(in srgb, var(--primary) 32%, transparent);
+  --action-disabled-foreground: color-mix(in srgb, var(--primary-foreground) 72%, transparent);
+  --pill-info-bg: var(--status-scheduled-bg);
+  --pill-info-fg: var(--status-scheduled-fg);
 }
 
 .dark {
@@ -153,9 +175,31 @@
   --status-scheduled-fg: #e0e5ff;
   --status-completed-bg: rgba(45, 191, 122, 0.22);
   --status-completed-fg: #c3ffe8;
+  --status-cancelled-bg: rgba(255, 118, 138, 0.26);
+  --status-cancelled-fg: #ffd6de;
   --button-hover: rgba(140, 160, 255, 0.18);
   --button-border: rgba(140, 160, 255, 0.55);
   --button-text-muted: #e7ebff;
+  --dashboard-hero-from: var(--brand-gradient-start);
+  --dashboard-hero-to: var(--brand-gradient-end);
+  --dashboard-hero-highlight: rgba(143, 160, 255, 0.35);
+  --appointment-card: rgba(124, 141, 255, 0.08);
+  --appointment-card-border: rgba(142, 160, 255, 0.35);
+  --calendar-day: rgba(244, 247, 255, 0.9);
+  --calendar-day-muted: rgba(184, 197, 255, 0.68);
+  --calendar-outside: rgba(143, 160, 255, 0.48);
+  --calendar-hover-bg: rgba(124, 141, 255, 0.22);
+  --calendar-focus-ring: rgba(143, 160, 255, 0.6);
+  --action-success: var(--stat-green-mid);
+  --action-success-hover: var(--stat-green-end);
+  --action-success-foreground: #06121c;
+  --action-danger: var(--stat-red-mid);
+  --action-danger-hover: var(--stat-red-end);
+  --action-danger-foreground: #140404;
+  --action-disabled-bg: color-mix(in srgb, var(--primary) 24%, transparent);
+  --action-disabled-foreground: color-mix(in srgb, var(--primary-foreground) 60%, transparent);
+  --pill-info-bg: var(--status-scheduled-bg);
+  --pill-info-fg: var(--status-scheduled-fg);
 }
 
 @theme inline {
