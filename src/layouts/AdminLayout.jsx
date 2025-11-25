@@ -11,6 +11,7 @@ import {
   LayoutGrid,
   Users2,
   Building2,
+  FileText,
 } from "lucide-react"
 import { useAuth } from "../hooks/useAuth"
 import toast from "react-hot-toast"
@@ -56,6 +57,7 @@ export const AdminLayout = () => {
     { name: "Dashboard", path: "/admin/dashboard", icon: LayoutGrid },
     { name: "Manage Users", path: "/admin/users", icon: Users2 },
     { name: "Departments", path: "/admin/departments", icon: Building2 },
+    { name: "Operational Reports", path: "/admin/reports", icon: FileText },
   ]
 
   return (

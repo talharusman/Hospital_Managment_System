@@ -50,7 +50,7 @@ export const LoginPage = () => {
         lab_technician: "/lab/dashboard",
         "lab technician": "/lab/dashboard",
         pharmacist: "/pharmacy/dashboard",
-        staff: "/billing/dashboard",
+        staff: "/staff/dashboard",
       }
 
       const destination = roleRouteMap[normalizedRole]

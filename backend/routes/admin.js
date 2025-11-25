@@ -21,5 +21,6 @@ router.get("/departments/:id", adminController.getDepartmentById)
 router.post("/departments", adminController.createDepartment)
 router.put("/departments/:id", adminController.updateDepartment)
 router.delete("/departments/:id", adminController.deleteDepartment)
+router.get("/reports", adminController.getReports)
 
 module.exports = router

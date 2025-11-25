@@ -1,81 +1,150 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertTriangle, ShoppingCart, RefreshCw } from "lucide-react"
+
 import { pharmacyAPI } from "../../services/api"
-import { AlertTriangle, ShoppingCart } from "lucide-react"
+import { LoadingSpinner } from "../../components/LoadingSpinner"
+import { ErrorAlert } from "../../components/ErrorAlert"
+
+const DEFAULT_THRESHOLD = 10
 
 export const LowStockAlertsPage = () => {
   const [alerts, setAlerts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [threshold, setThreshold] = useState(DEFAULT_THRESHOLD)
+  const [thresholdInput, setThresholdInput] = useState(String(DEFAULT_THRESHOLD))
 
   useEffect(() => {
     fetchLowStockAlerts()
-  }, [])
+  }, [threshold])
 
   const fetchLowStockAlerts = async () => {
     try {
-      const response = await pharmacyAPI.getMedicines()
-      const lowStock = response.data.filter((m) => m.quantity < 10)
-      setAlerts(lowStock)
-    } catch (error) {
-      // Mock data
-      setAlerts([
-        { id: 1, name: "Aspirin", quantity: 5, minLevel: 20, category: "Pain Relief" },
-        { id: 3, name: "Metformin", quantity: 8, minLevel: 15, category: "Diabetes" },
-      ])
+      setLoading(true)
+      setError(null)
+      const { data } = await pharmacyAPI.getLowStock({ threshold })
+      setAlerts(Array.isArray(data) ? data : [])
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to load low stock alerts"
+      setError(message)
     } finally {
       setLoading(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    )
+  const handleApplyThreshold = () => {
+    const parsed = Number(thresholdInput)
+    const nextValue = Number.isNaN(parsed) || parsed < 0 ? DEFAULT_THRESHOLD : parsed
+    setThreshold(nextValue)
   }
 
+  const totalShortage = useMemo(() => {
+    return alerts.reduce((sum, alert) => {
+      const currentQty = Number(alert.quantity) || 0
+      const shortage = Math.max(threshold - currentQty, 0)
+      return sum + shortage
+    }, 0)
+  }, [alerts, threshold])
+
+  if (loading) return <LoadingSpinner />
+  if (error) return <ErrorAlert message={error} onRetry={fetchLowStockAlerts} />
+
   return (
-    <div className="p-8 bg-gray-100 min-h-screen">
-      <h1 className="text-3xl font-bold text-gray-800 mb-8">Low Stock Alerts</h1>
+    <div className="min-h-screen bg-background p-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Low Stock Alerts</h1>
+          <p className="text-muted-foreground">Monitor medicines that are close to running out of stock.</p>
+        </div>
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-2 text-sm shadow-sm">
+          <label htmlFor="threshold" className="text-muted-foreground">Minimum quantity</label>
+          <input
+            id="threshold"
+            type="number"
+            min="0"
+            value={thresholdInput}
+            onChange={(event) => setThresholdInput(event.target.value)}
+            className="w-20 rounded-lg border border-border/70 bg-background px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <button
+            type="button"
+            onClick={handleApplyThreshold}
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground transition hover:bg-primary/90"
+          >
+            <RefreshCw size={14} /> Apply
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Current alerts</h2>
+            <p className="text-sm text-muted-foreground">{alerts.length} medicines below {threshold} units • total shortage {totalShortage} units</p>
+          </div>
+          <button
+            type="button"
+            onClick={fetchLowStockAlerts}
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
 
       {alerts.length === 0 ? (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-8 text-center">
-          <p className="text-green-800 text-lg font-semibold">All medicines are in stock!</p>
+        <div className="rounded-2xl border border-border bg-card p-10 text-center shadow-sm">
+          <p className="text-lg font-semibold text-(--status-completed-fg)">All medicines meet the minimum stock level.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {alerts.map((alert) => (
-            <div key={alert.id} className="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
-              <div className="flex items-start justify-between">
+        <div className="grid gap-4 md:grid-cols-2">
+          {alerts.map((alert) => {
+            const currentQty = Number(alert.quantity) || 0
+            const shortage = Math.max(threshold - currentQty, 0)
+            return (
+              <div key={alert.id} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <AlertTriangle className="text-red-600 flex-shrink-0 mt-1" size={24} />
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-800">{alert.name}</h3>
-                    <p className="text-gray-600">Category: {alert.category}</p>
-                    <div className="mt-3 text-sm">
-                      <p className="text-gray-700">
-                        <span className="font-semibold">Current Stock:</span> {alert.quantity} units
-                      </p>
-                      <p className="text-gray-700">
-                        <span className="font-semibold">Minimum Level:</span> {alert.minLevel} units
-                      </p>
-                      <p className="text-red-600 font-semibold mt-2">
-                        Short by {alert.minLevel - alert.quantity} units
-                      </p>
+                  <div className="rounded-full bg-(--status-pending-bg) p-3 text-(--status-pending-fg)">
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground">{alert.name}</h3>
+                        <p className="text-sm text-muted-foreground">Batch {alert.batch_number || "N/A"}</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+                      >
+                        <ShoppingCart size={14} /> Order
+                      </button>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
+                      <div className="rounded-xl bg-muted/40 px-3 py-2">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Current stock</p>
+                        <p className="text-base font-semibold text-foreground">{currentQty}</p>
+                      </div>
+                      <div className="rounded-xl bg-muted/40 px-3 py-2">
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Minimum</p>
+                        <p className="text-base font-semibold text-foreground">{threshold}</p>
+                      </div>
+                      <div className="rounded-xl bg-(--status-pending-bg) px-3 py-2 text-(--status-pending-fg)">
+                        <p className="text-xs uppercase tracking-wide">Short by</p>
+                        <p className="text-base font-semibold">{shortage}</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <button className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm">
-                  <ShoppingCart size={18} /> Order Now
-                </button>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
+
 export default LowStockAlertsPage

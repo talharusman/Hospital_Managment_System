@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { patientAPI } from "../../services/api"
+import { staffAPI } from "../../services/api"
 import toast from "react-hot-toast"
 import { Users, Calendar, AlertCircle, CheckCircle } from "lucide-react"
 import { StatCard } from "../../components/StatCard"
@@ -22,15 +22,16 @@ export const StaffDashboard = () => {
     try {
       setLoading(true)
       setError(null)
-      const response = await patientAPI.getDashboard()
+      const { data } = await staffAPI.getDashboard()
+      const metrics = data?.metrics || {}
 
       setStats({
-        totalPatients: 156,
-        todayAppointments: 12,
-        pendingTasks: 5,
-        completedToday: 28,
+        totalPatients: metrics.totalPatients ?? 0,
+        todayAppointments: metrics.todayAppointments ?? 0,
+        pendingTasks: metrics.pendingTasks ?? 0,
+        completedToday: metrics.completedToday ?? 0,
       })
-      setAppointments(response.data.recentAppointments?.slice(0, 8) || [])
+      setAppointments(Array.isArray(data?.appointments) ? data.appointments.slice(0, 8) : [])
     } catch (err) {
       const errorMsg = err.response?.data?.message || "Failed to load dashboard"
       setError(errorMsg)

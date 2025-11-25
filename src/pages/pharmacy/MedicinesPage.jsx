@@ -1,278 +1,746 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { pharmacyAPI } from "../../services/api"
+import { useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast"
-import { Plus, Edit2, Trash2, Search } from "lucide-react"
+import { Plus, Edit2, Trash2, Search, Loader2, Hash, LineChart, UserRound, CalendarClock, X } from "lucide-react"
+
+import { pharmacyAPI, billingAPI } from "../../services/api"
+import { LoadingSpinner } from "../../components/LoadingSpinner"
+import { ErrorAlert } from "../../components/ErrorAlert"
+
+const defaultFormValues = {
+  name: "",
+  generic_name: "",
+  batch_number: "",
+  expiry_date: "",
+  quantity: "",
+  unit_price: "",
+  supplier_id: "",
+}
+
+const toNumberOr = (value, fallback = 0) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+const toOptionalNumber = (value) => {
+  const trimmed = `${value ?? ""}`.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const normalizeCurrency = (value) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const parsePrescriptionNotes = (notes) => {
+  if (!notes) return []
+
+  if (Array.isArray(notes)) return notes
+
+  let payload = notes
+  if (typeof payload === "string") {
+    try {
+      payload = JSON.parse(payload)
+    } catch (error) {
+      return []
+    }
+  }
+
+  if (Array.isArray(payload)) return payload
+  if (payload && Array.isArray(payload.medications)) return payload.medications
+  return []
+}
+
+const formatPrescriptionDate = (value) => {
+  if (!value) return "-"
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(new Date(value))
+  } catch (error) {
+    return value
+  }
+}
 
 export const MedicinesPage = () => {
   const [medicines, setMedicines] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [searchTerm, setSearchTerm] = useState("")
-  const [formData, setFormData] = useState({
-    name: "",
-    generic_name: "",
-    category: "",
-    dosage: "",
-    quantity: "",
-    price: "",
-    manufacturer: "",
-    expiry_date: "",
-  })
+  const [formData, setFormData] = useState(defaultFormValues)
+  const [selectedMedicine, setSelectedMedicine] = useState(null)
+  const [activeDetailTab, setActiveDetailTab] = useState("inventory")
+  const [prescriptions, setPrescriptions] = useState([])
+  const [loadingPrescriptions, setLoadingPrescriptions] = useState(false)
+  const [prescriptionError, setPrescriptionError] = useState(null)
+  const [billingDrafts, setBillingDrafts] = useState({})
+  const [isProcessingBilling, setIsProcessingBilling] = useState(false)
 
   useEffect(() => {
     fetchMedicines()
   }, [])
 
+  useEffect(() => {
+    fetchPrescriptions()
+  }, [])
+
   const fetchMedicines = async () => {
     try {
-      const response = await pharmacyAPI.getMedicines()
-      setMedicines(response.data)
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to load medicines")
-      console.log("[v0] Error fetching medicines:", error)
+      setLoading(true)
+      setError(null)
+      const { data } = await pharmacyAPI.getMedicines()
+      setMedicines(Array.isArray(data) ? data : [])
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to load medicines"
+      setError(message)
+      toast.error(message)
       setMedicines([])
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const fetchPrescriptions = async () => {
     try {
-      if (editingId) {
-        await pharmacyAPI.updateMedicine(editingId, formData)
-        toast.success("Medicine updated successfully")
-      } else {
-        await pharmacyAPI.createMedicine(formData)
-        toast.success("Medicine added successfully")
-      }
-      setShowForm(false)
-      setEditingId(null)
-      setFormData({
-        name: "",
-        generic_name: "",
-        category: "",
-        dosage: "",
-        quantity: "",
-        price: "",
-        manufacturer: "",
-        expiry_date: "",
-      })
-      fetchMedicines()
-    } catch (error) {
-      toast.error("Operation failed")
+      setLoadingPrescriptions(true)
+      setPrescriptionError(null)
+      const { data } = await pharmacyAPI.getPrescriptionOptions()
+      setPrescriptions(Array.isArray(data) ? data : [])
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to load prescriptions"
+      setPrescriptionError(message)
+      toast.error(message)
+      setPrescriptions([])
+    } finally {
+      setLoadingPrescriptions(false)
     }
   }
 
-  const handleEdit = (medicine) => {
-    setFormData(medicine)
-    setEditingId(medicine.id)
+  const buildMatchKey = (prescriptionId, index) => `${prescriptionId}-${index}`
+
+  const matchingPrescriptions = useMemo(() => {
+    if (!selectedMedicine) return []
+
+    const searchableNames = [selectedMedicine.name, selectedMedicine.generic_name]
+      .map((value) => (value || "").toLowerCase())
+      .filter(Boolean)
+
+    if (searchableNames.length === 0) return []
+
+    return prescriptions.flatMap((prescription) => {
+      const medications = parsePrescriptionNotes(prescription.notes)
+      if (!medications.length) return []
+
+      return medications
+        .map((medication, index) => ({ medication, index }))
+        .filter(({ medication }) => {
+          const medName = (medication.name || "").toLowerCase()
+          if (!medName) return false
+          return searchableNames.some((needle) => medName.includes(needle) || needle.includes(medName))
+        })
+        .map(({ medication, index }) => ({
+          key: buildMatchKey(prescription.id, index),
+          prescription,
+          medication,
+          medicationIndex: index,
+        }))
+    })
+  }, [prescriptions, selectedMedicine])
+
+  const handleBillingInputChange = (key, field, value) => {
+    setBillingDrafts((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        [field]: value,
+      },
+    }))
+  }
+
+  const handleDispenseAndBill = async (match) => {
+    if (isProcessingBilling || !selectedMedicine) return
+
+    const draft = billingDrafts[match.key] || {}
+    const quantity = Number(draft.quantity)
+
+    if (!quantity || Number.isNaN(quantity) || quantity <= 0) {
+      toast.error("Enter a valid quantity to dispense and bill")
+      return
+    }
+
+    const currentStock = Number(selectedMedicine.quantity) || 0
+    if (quantity > currentStock) {
+      toast.error("Requested quantity exceeds current stock")
+      return
+    }
+
+    const updatedQuantity = Math.max(currentStock - quantity, 0)
+    let dispenseCompleted = false
+
+    try {
+      setIsProcessingBilling(true)
+
+      await pharmacyAPI.dispenseMedicine({
+        prescriptionId: match.prescription.id,
+        medicineId: selectedMedicine.id,
+        quantity,
+      })
+
+      dispenseCompleted = true
+
+      const unitPrice = normalizeCurrency(selectedMedicine.unit_price)
+      const amount = Number((unitPrice * quantity).toFixed(2))
+
+      await billingAPI.createInvoice({
+        patient_id: match.prescription.patient_id,
+        amount,
+        description: `Pharmacy - ${selectedMedicine.name} x${quantity} for ${match.prescription.patient_name}`,
+        due_date: draft.dueDate || null,
+      })
+
+      toast.success("Dispensed and added to bill")
+
+      setBillingDrafts((prev) => ({
+        ...prev,
+        [match.key]: {
+          ...prev[match.key],
+          quantity: "",
+        },
+      }))
+
+      setMedicines((prev) =>
+        prev.map((medicine) =>
+          medicine.id === selectedMedicine.id
+            ? { ...medicine, quantity: updatedQuantity }
+            : medicine,
+        ),
+      )
+
+      setSelectedMedicine((prev) =>
+        prev
+          ? { ...prev, quantity: updatedQuantity }
+          : prev,
+      )
+    } catch (err) {
+      if (dispenseCompleted) {
+        setMedicines((prev) =>
+          prev.map((medicine) =>
+            medicine.id === selectedMedicine.id
+              ? { ...medicine, quantity: updatedQuantity }
+              : medicine,
+          ),
+        )
+
+        setSelectedMedicine((prev) =>
+          prev
+            ? { ...prev, quantity: updatedQuantity }
+            : prev,
+        )
+
+        setBillingDrafts((prev) => ({
+          ...prev,
+          [match.key]: {
+            ...prev[match.key],
+            quantity: "",
+          },
+        }))
+      }
+
+      const fallbackMessage = dispenseCompleted
+        ? "Dispensed successfully, but billing failed. Please review the patient's invoice manually."
+        : "Failed to dispense and bill"
+
+      const message = err.response?.data?.message || fallbackMessage
+      toast.error(message)
+    } finally {
+      setIsProcessingBilling(false)
+    }
+  }
+
+  const handleFormOpen = (medicine = null) => {
+    setSelectedMedicine(null)
+    if (medicine) {
+      setFormData({
+        name: medicine.name || "",
+        generic_name: medicine.generic_name || "",
+        batch_number: medicine.batch_number || "",
+        expiry_date: medicine.expiry_date ? medicine.expiry_date.slice(0, 10) : "",
+        quantity: medicine.quantity ?? "",
+        unit_price: medicine.unit_price ?? "",
+        supplier_id: medicine.supplier_id ?? "",
+      })
+      setEditingId(medicine.id)
+    } else {
+      setFormData(defaultFormValues)
+      setEditingId(null)
+    }
     setShowForm(true)
   }
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this medicine?")) {
-      try {
-        setMedicines(medicines.filter((m) => m.id !== id))
-        toast.success("Medicine deleted")
-      } catch (error) {
-        toast.error("Failed to delete")
+  const resetForm = () => {
+    setShowForm(false)
+    setEditingId(null)
+    setFormData(defaultFormValues)
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    try {
+      setSaving(true)
+      const payload = {
+        name: formData.name.trim(),
+        generic_name: formData.generic_name.trim() || null,
+        batch_number: formData.batch_number.trim() || null,
+        expiry_date: formData.expiry_date || null,
+        quantity: toNumberOr(formData.quantity, 0),
+        unit_price: toNumberOr(formData.unit_price, 0),
+        supplier_id: toOptionalNumber(formData.supplier_id),
       }
+
+      if (editingId) {
+        await pharmacyAPI.updateMedicine(editingId, payload)
+        toast.success("Medicine updated successfully")
+      } else {
+        await pharmacyAPI.createMedicine(payload)
+        toast.success("Medicine added successfully")
+      }
+
+      resetForm()
+      await fetchMedicines()
+    } catch (err) {
+      const message = err.response?.data?.message || "Unable to save medicine"
+      toast.error(message)
+    } finally {
+      setSaving(false)
     }
   }
 
-  const filteredMedicines = medicines.filter(
-    (med) =>
-      med.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      med.generic_name.toLowerCase().includes(searchTerm.toLowerCase()),
-  )
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-      </div>
-    )
+  const handleDelete = async (id) => {
+    const confirmed = window.confirm("Delete this medicine from inventory?")
+    if (!confirmed) return
+    try {
+      await pharmacyAPI.deleteMedicine(id)
+      toast.success("Medicine removed")
+      setMedicines((prev) => prev.filter((item) => item.id !== id))
+    } catch (err) {
+      const message = err.response?.data?.message || "Failed to delete medicine"
+      toast.error(message)
+    }
   }
 
+  const filteredMedicines = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase()
+    if (!term) return medicines
+    return medicines.filter((medicine) => {
+      const name = medicine.name?.toLowerCase() || ""
+      const genericName = medicine.generic_name?.toLowerCase() || ""
+      const batchNumber = medicine.batch_number?.toLowerCase() || ""
+      return name.includes(term) || genericName.includes(term) || batchNumber.includes(term)
+    })
+  }, [medicines, searchTerm])
+
+  if (loading) return <LoadingSpinner />
+  if (error) return <ErrorAlert message={error} />
+
   return (
-    <div className="p-8 bg-gray-100 min-h-screen">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Medicine Inventory</h1>
+    <>
+      <div className="min-h-screen bg-background p-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Medicine Inventory</h1>
+          <p className="text-muted-foreground">Maintain accurate stock levels and essential medicine details.</p>
+        </div>
         <button
-          onClick={() => {
-            setShowForm(true)
-            setEditingId(null)
-            setFormData({
-              name: "",
-              generic_name: "",
-              category: "",
-              dosage: "",
-              quantity: "",
-              price: "",
-              manufacturer: "",
-              expiry_date: "",
-            })
-          }}
-          className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+          type="button"
+          onClick={() => handleFormOpen()}
+          className="inline-flex items-center gap-2 rounded-xl border border-border/70 bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
         >
-          <Plus size={20} /> Add Medicine
+          <Plus size={18} /> Add Medicine
         </button>
       </div>
 
-      {/* Search */}
       <div className="mb-6">
+        <label className="sr-only" htmlFor="medicine-search">
+          Search medicines
+        </label>
         <div className="relative">
-          <Search className="absolute left-3 top-3 text-gray-400" size={20} />
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
           <input
-            type="text"
-            placeholder="Search by medicine name or generic name..."
+            id="medicine-search"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search by name, generic name, or batch number"
+            className="w-full rounded-xl border border-border/70 bg-card/80 px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
         </div>
       </div>
 
-      {/* Add/Edit Form */}
-      {showForm && (
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">{editingId ? "Edit Medicine" : "Add New Medicine"}</h2>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input
-              type="text"
-              placeholder="Medicine Name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <input
-              type="text"
-              placeholder="Generic Name"
-              value={formData.generic_name}
-              onChange={(e) => setFormData({ ...formData, generic_name: e.target.value })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+      {filteredMedicines.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-card/40 p-10 text-center text-sm text-muted-foreground">
+          No medicines match the current filters.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {filteredMedicines.map((medicine) => (
+            <button
+              key={medicine.id}
+              type="button"
+              onClick={() => {
+                setSelectedMedicine(medicine)
+                setActiveDetailTab("inventory")
+                setBillingDrafts({})
+              }}
+              className="flex h-full w-full flex-col rounded-2xl border border-border bg-card/90 p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
-              <option value="">Select Category</option>
-              <option value="Pain Relief">Pain Relief</option>
-              <option value="Fever">Fever</option>
-              <option value="Diabetes">Diabetes</option>
-              <option value="Antibiotic">Antibiotic</option>
-              <option value="Vitamin">Vitamin</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Dosage (e.g., 500mg)"
-              value={formData.dosage}
-              onChange={(e) => setFormData({ ...formData, dosage: e.target.value })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <input
-              type="number"
-              placeholder="Quantity"
-              value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-              required
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <input
-              type="number"
-              placeholder="Price"
-              value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-              step="0.01"
-              required
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <input
-              type="text"
-              placeholder="Manufacturer"
-              value={formData.manufacturer}
-              onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <input
-              type="date"
-              value={formData.expiry_date}
-              onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-            />
-            <div className="md:col-span-2 flex gap-2">
-              <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg">
-                {editingId ? "Update" : "Add"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false)
-                  setEditingId(null)
-                }}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
+              <div className="flex items-start justify-between gap-4">
+                <p className="text-lg font-semibold text-foreground">{medicine.name}</p>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                    (Number(medicine.quantity) || 0) < 10
+                      ? "bg-(--status-pending-bg) text-(--status-pending-fg)"
+                      : "bg-(--status-completed-bg) text-(--status-completed-fg)"
+                  }`}
+                >
+                  {medicine.quantity ?? 0} in stock
+                </span>
+              </div>
+              <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tap to view details</p>
+            </button>
+          ))}
         </div>
       )}
 
-      {/* Medicines Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Medicine Name</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Category</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Dosage</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Quantity</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Price</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Expiry</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredMedicines.map((medicine) => (
-              <tr key={medicine.id} className="border-b border-gray-200 hover:bg-gray-50">
-                <td className="px-6 py-4 text-sm font-medium text-gray-800">{medicine.name}</td>
-                <td className="px-6 py-4 text-sm text-gray-600">{medicine.category}</td>
-                <td className="px-6 py-4 text-sm text-gray-600">{medicine.dosage}</td>
-                <td className="px-6 py-4 text-sm">
-                  <span
-                    className={`px-2 py-1 rounded text-xs font-semibold ${
-                      medicine.quantity < 10 ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+        {selectedMedicine && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={() => setSelectedMedicine(null)}>
+            <div
+              className="w-full max-w-3xl rounded-2xl border border-border bg-card p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-semibold text-foreground">{selectedMedicine.name}</h2>
+                  <p className="text-sm text-muted-foreground">{selectedMedicine.generic_name || "No generic name recorded"}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMedicine(null)}
+                  className="rounded-full p-1 text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="mt-6 flex items-center gap-2 rounded-xl bg-muted/30 p-1">
+                {[
+                  { id: "inventory", label: "Inventory" },
+                  { id: "orders", label: "Prescription Orders" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveDetailTab(tab.id)}
+                    className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                      activeDetailTab === tab.id
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {medicine.quantity}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-600">${medicine.price.toFixed(2)}</td>
-                <td className="px-6 py-4 text-sm text-gray-600">{medicine.expiry_date}</td>
-                <td className="px-6 py-4 flex gap-2">
-                  <button onClick={() => handleEdit(medicine)} className="p-1 hover:bg-blue-100 text-blue-600 rounded">
-                    <Edit2 size={18} />
+                    {tab.label}
                   </button>
-                  <button
-                    onClick={() => handleDelete(medicine.id)}
-                    className="p-1 hover:bg-red-100 text-red-600 rounded"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                ))}
+              </div>
+
+              {activeDetailTab === "inventory" ? (
+                <>
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Hash size={16} />
+                        <span>Batch number</span>
+                      </div>
+                      <p className="text-base font-semibold text-foreground">{selectedMedicine.batch_number || "Not provided"}</p>
+                    </div>
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <CalendarClock size={16} />
+                        <span>Expiry date</span>
+                      </div>
+                      <p className="text-base font-semibold text-foreground">{selectedMedicine.expiry_date || "Not specified"}</p>
+                    </div>
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <LineChart size={16} />
+                        <span>Unit price</span>
+                      </div>
+                      <p className="text-base font-semibold text-foreground">
+                        {normalizeCurrency(selectedMedicine.unit_price).toLocaleString(undefined, {
+                          style: "currency",
+                          currency: "USD",
+                        })}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Inventory value {normalizeCurrency((Number(selectedMedicine.unit_price) || 0) * (Number(selectedMedicine.quantity) || 0)).toLocaleString(undefined, {
+                          style: "currency",
+                          currency: "USD",
+                        })}
+                      </p>
+                    </div>
+                    <div className="space-y-3 rounded-xl border border-border/70 bg-card/80 p-4">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <UserRound size={16} />
+                        <span>Supplier</span>
+                      </div>
+                      <p className="text-base font-semibold text-foreground">{selectedMedicine.supplier_id || "Not linked"}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border/70 bg-muted/40 p-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Quantity in stock</p>
+                      <p className="text-2xl font-semibold text-foreground">{selectedMedicine.quantity ?? 0}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleFormOpen(selectedMedicine)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+                      >
+                        <Edit2 size={16} /> Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(selectedMedicine.id)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-4 py-2 text-sm font-semibold text-destructive transition hover:bg-destructive/10"
+                      >
+                        <Trash2 size={16} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      {loadingPrescriptions
+                        ? "Loading prescription details…"
+                        : `${matchingPrescriptions.length} matching ${matchingPrescriptions.length === 1 ? "prescription" : "prescriptions"}`}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={fetchPrescriptions}
+                      className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+                      disabled={loadingPrescriptions}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+
+                  {loadingPrescriptions ? (
+                    <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading prescriptions…
+                    </div>
+                  ) : prescriptionError ? (
+                    <div className="space-y-3 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+                      <p>{prescriptionError}</p>
+                      <button
+                        type="button"
+                        onClick={fetchPrescriptions}
+                        className="rounded-lg border border-destructive/40 px-3 py-1 text-xs font-semibold text-destructive transition hover:bg-destructive/10"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : matchingPrescriptions.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+                      No prescriptions referencing this medicine yet.
+                    </div>
+                  ) : (
+                    matchingPrescriptions.map((match) => {
+                      const draft = billingDrafts[match.key] || {}
+
+                      const detailsLine = [match.medication.dosage, match.medication.frequency, match.medication.duration]
+                        .filter(Boolean)
+                        .join(" • ")
+
+                      return (
+                        <div key={match.key} className="space-y-4 rounded-2xl border border-border bg-card/90 p-5 shadow-sm">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-base font-semibold text-foreground">{match.prescription.patient_name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Prescription #{match.prescription.id} • {formatPrescriptionDate(match.prescription.prescription_date)}
+                              </p>
+                            </div>
+                            <span className="rounded-full border border-border/50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {match.prescription.status || "pending"}
+                            </span>
+                          </div>
+
+                          <div className="rounded-xl border border-border/70 bg-muted/30 p-4 text-sm">
+                            <p className="font-semibold text-foreground">{match.medication.name}</p>
+                            <p className="text-muted-foreground">{detailsLine || "No additional instructions"}</p>
+                            {match.prescription.doctor_name && (
+                              <p className="mt-2 text-xs text-muted-foreground">Prescribed by {match.prescription.doctor_name}</p>
+                            )}
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                            <div className="space-y-2">
+                              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Quantity to dispense</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={draft.quantity || ""}
+                                onChange={(event) => handleBillingInputChange(match.key, "quantity", event.target.value)}
+                                className="w-full rounded-lg border border-border/70 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                placeholder="Units"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Invoice due date (optional)</label>
+                              <input
+                                type="date"
+                                value={draft.dueDate || ""}
+                                onChange={(event) => handleBillingInputChange(match.key, "dueDate", event.target.value)}
+                                className="w-full rounded-lg border border-border/70 bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDispenseAndBill(match)}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                              disabled={isProcessingBilling}
+                            >
+                              {isProcessingBilling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus size={16} />} Dispense &amp; Bill
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" onClick={resetForm}>
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold text-foreground">{editingId ? "Edit medicine" : "Add new medicine"}</h2>
+                <p className="text-sm text-muted-foreground">Provide the essential inventory details for this medicine.</p>
+              </div>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="rounded-full p-1 text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Medicine name</label>
+                <input
+                  value={formData.name}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
+                  required
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Generic name</label>
+                <input
+                  value={formData.generic_name}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, generic_name: event.target.value }))}
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Batch number</label>
+                <input
+                  value={formData.batch_number}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, batch_number: event.target.value }))}
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Expiry date</label>
+                <input
+                  type="date"
+                  value={formData.expiry_date}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, expiry_date: event.target.value }))}
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Quantity in stock</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={formData.quantity}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, quantity: event.target.value }))}
+                  required
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Unit price (USD)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.unit_price}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, unit_price: event.target.value }))}
+                  required
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Supplier ID (optional)</label>
+                <input
+                  value={formData.supplier_id}
+                  onChange={(event) => setFormData((prev) => ({ ...prev, supplier_id: event.target.value }))}
+                  className="w-full rounded-lg border border-border/70 bg-background px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="md:col-span-2 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:bg-muted/40 hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={saving}
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />} {editingId ? "Update" : "Add"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
+
 export default MedicinesPage

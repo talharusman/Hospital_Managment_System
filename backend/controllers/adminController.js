@@ -1,6 +1,11 @@
 const bcrypt = require("bcryptjs")
 const pool = require("../config/database")
 
+const toNumber = (value) => {
+  const parsed = Number(value)
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
 const getConnection = async () => {
   const connection = await pool.getConnection()
   return connection
@@ -70,6 +75,171 @@ exports.getStatistics = async (req, res) => {
     res.status(500).json({ message: `Failed to load statistics: ${error.message}`, error: error.message })
   } finally {
     connection.release()
+  }
+}
+
+exports.getReports = async (req, res) => {
+  let connection
+
+  try {
+    connection = await pool.getConnection()
+
+    const appointmentStatus = {
+      scheduled: 0,
+      completed: 0,
+      cancelled: 0,
+      noShow: 0,
+    }
+
+    try {
+      const [statusRows] = await connection.query(
+        `SELECT status, COUNT(*) AS count
+           FROM appointments
+       GROUP BY status`,
+      )
+
+      statusRows.forEach((row) => {
+        if (row.status === "no-show") {
+          appointmentStatus.noShow = toNumber(row.count)
+        } else if (appointmentStatus[row.status] !== undefined) {
+          appointmentStatus[row.status] = toNumber(row.count)
+        }
+      })
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let totalPatients = 0
+    try {
+      const [[patientsRow]] = await connection.query("SELECT COUNT(*) AS totalPatients FROM patients")
+      totalPatients = toNumber(patientsRow?.totalPatients)
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let upcomingAppointments = 0
+    try {
+      const [[upcomingRow]] = await connection.query(
+        `SELECT COUNT(*) AS upcoming
+           FROM appointments
+          WHERE appointment_date >= CURDATE()`,
+      )
+      upcomingAppointments = toNumber(upcomingRow?.upcoming)
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let pendingInvoices = 0
+    try {
+      const [[invoiceRow]] = await connection.query(
+        `SELECT COUNT(*) AS pendingInvoices
+           FROM invoices
+          WHERE status IN ('pending', 'overdue')`,
+      )
+      pendingInvoices = toNumber(invoiceRow?.pendingInvoices)
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let activeLabTests = 0
+    try {
+      const [[labRow]] = await connection.query(
+        `SELECT COUNT(*) AS activeTests
+           FROM test_requests
+          WHERE status IN ('pending', 'in-progress')`,
+      )
+      activeLabTests = toNumber(labRow?.activeTests)
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let departmentLoad = []
+    try {
+      const [departmentRows] = await connection.query(
+        `SELECT d.id,
+                d.name              AS department,
+                COUNT(s.id)          AS staffCount
+           FROM departments d
+      LEFT JOIN staff s ON s.department_id = d.id
+       GROUP BY d.id
+       ORDER BY staffCount DESC, d.name ASC`,
+      )
+
+      departmentLoad = departmentRows.map((row) => ({
+        id: row.id,
+        department: row.department,
+        staffCount: toNumber(row.staffCount),
+      }))
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let recentPatients = []
+    try {
+      const [recentRows] = await connection.query(
+        `SELECT p.id,
+                u.name       AS name,
+                u.email      AS email,
+                p.created_at AS registeredAt
+           FROM patients p
+           JOIN users u ON u.id = p.user_id
+       ORDER BY p.created_at DESC
+          LIMIT 6`,
+      )
+
+      recentPatients = recentRows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        registeredAt: row.registeredAt,
+      }))
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    let outstandingInvoices = []
+    try {
+      const [invoiceRows] = await connection.query(
+        `SELECT i.id,
+                i.amount,
+                i.due_date    AS dueDate,
+                i.status,
+                patUsers.name AS patientName
+           FROM invoices i
+           JOIN patients p ON p.id = i.patient_id
+           JOIN users patUsers ON patUsers.id = p.user_id
+          WHERE i.status IN ('pending', 'overdue')
+       ORDER BY i.due_date ASC
+          LIMIT 6`,
+      )
+
+      outstandingInvoices = invoiceRows.map((row) => ({
+        id: row.id,
+        amount: Number(row.amount) || 0,
+        dueDate: row.dueDate,
+        status: row.status,
+        patientName: row.patientName,
+      }))
+    } catch (error) {
+      if (error.code !== "ER_NO_SUCH_TABLE") throw error
+    }
+
+    res.json({
+      appointmentStatus,
+      metrics: {
+        totalPatients,
+        upcomingAppointments,
+        pendingInvoices,
+        activeLabTests,
+      },
+      departmentLoad,
+      recentPatients,
+      outstandingInvoices,
+    })
+  } catch (error) {
+    res.status(500).json({ message: "Failed to load operational reports", error: error.message })
+  } finally {
+    if (connection) connection.release()
   }
 }
 

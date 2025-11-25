@@ -40,6 +40,7 @@ export const adminAPI = {
   updateDepartment: (id, data) => api.put(`/admin/departments/${id}`, data),
   deleteDepartment: (id) => api.delete(`/admin/departments/${id}`),
   getStatistics: () => api.get("/admin/statistics"),
+  getReports: () => api.get("/admin/reports"),
 }
 
 // Doctor endpoints
@@ -81,10 +82,13 @@ export const labAPI = {
 
 // Pharmacy endpoints
 export const pharmacyAPI = {
-  getMedicines: () => api.get("/pharmacy/medicines"),
-  createMedicine: (data) => api.post("/pharmacy/medicines", data),
-  updateMedicine: (id, data) => api.put(`/pharmacy/medicines/${id}`, data),
+  getMedicines: () => api.get("/pharmacy"),
+  createMedicine: (data) => api.post("/pharmacy", data),
+  updateMedicine: (id, data) => api.put(`/pharmacy/${id}`, data),
+  deleteMedicine: (id) => api.delete(`/pharmacy/${id}`),
+  getLowStock: (params = {}) => api.get("/pharmacy/low-stock", { params }),
   getDispensingHistory: () => api.get("/pharmacy/dispensing-history"),
+  getPrescriptionOptions: () => api.get("/pharmacy/prescriptions"),
   dispenseMedicine: (data) => api.post("/pharmacy/dispense", data),
 }
 
@@ -95,6 +99,15 @@ export const billingAPI = {
   createInvoice: (data) => api.post("/billing/invoices", data),
   processPayment: (data) => api.post("/billing/payments", data),
   getPaymentHistory: () => api.get("/billing/payments"),
+}
+
+// Staff endpoints
+export const staffAPI = {
+  getDashboard: () => api.get("/staff/dashboard"),
+  getAppointments: (params = {}) => api.get("/staff/appointments", { params }),
+  updateAppointmentStatus: (id, payload) => api.put(`/staff/appointments/${id}/status`, payload),
+  rescheduleAppointment: (id, payload) => api.put(`/staff/appointments/${id}/reschedule`, payload),
+  getPatients: () => api.get("/staff/patients"),
 }
 
 export default api

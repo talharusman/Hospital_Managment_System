@@ -6,6 +6,7 @@ import { AdminLayout } from "./layouts/AdminLayout"
 import { AdminDashboard } from "./pages/admin/AdminDashboard"
 import { ManageUsersPage } from "./pages/admin/ManageUsersPage"
 import { ManageDepartmentsPage } from "./pages/admin/ManageDepartmentsPage"
+import { AdminReportsPage } from "./pages/admin/AdminReportsPage"
 import { DoctorLayout } from "./layouts/DoctorLayout"
 import { DoctorDashboard } from "./pages/doctor/DoctorDashboard"
 import { AppointmentsPage } from "./pages/doctor/AppointmentsPage"
@@ -71,6 +72,7 @@ function App() {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<ManageUsersPage />} />
             <Route path="departments" element={<ManageDepartmentsPage />} />
+            <Route path="reports" element={<AdminReportsPage />} />
           </Route>
 
           {/* Doctor Routes */}

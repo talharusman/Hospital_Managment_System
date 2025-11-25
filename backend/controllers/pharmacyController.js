@@ -284,15 +284,16 @@ exports.getPrescriptionOptions = async (req, res) => {
   let connection
   try {
     connection = await pool.getConnection()
-    const [prescriptions] = await connection.query(
-      `SELECT pr.id,
-              pr.prescription_date,
-              pr.status,
-              pat.id     AS patient_id,
-              uPat.name  AS patient_name,
-              doc.id     AS doctor_id,
-              uDoc.name  AS doctor_name
-         FROM prescriptions pr
+        const [prescriptions] = await connection.query(
+       `SELECT pr.id,
+            pr.prescription_date,
+            pr.status,
+            pr.notes,
+            pat.id     AS patient_id,
+            uPat.name  AS patient_name,
+            doc.id     AS doctor_id,
+            uDoc.name  AS doctor_name
+          FROM prescriptions pr
          JOIN patients pat ON pat.id = pr.patient_id
          JOIN users uPat ON uPat.id = pat.user_id
          JOIN doctors doc ON doc.id = pr.doctor_id
