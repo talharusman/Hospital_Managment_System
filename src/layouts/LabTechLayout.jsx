@@ -4,11 +4,12 @@ import { useState } from "react"
 import { Outlet, useNavigate } from "react-router-dom"
 import { Menu, X, LogOut, Moon, Sun } from "lucide-react"
 import { useAuth } from "../hooks/useAuth"
+import { useDarkMode } from "../hooks/useDarkMode"
 import toast from "react-hot-toast"
 
 export const LabTechLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
+  const [darkMode, setDarkMode] = useDarkMode(true)
   const { logout, user } = useAuth()
   const navigate = useNavigate()
 

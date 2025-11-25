@@ -16,11 +16,12 @@ import {
   X,
 } from "lucide-react"
 import { useAuth } from "../hooks/useAuth"
+import { useDarkMode } from "../hooks/useDarkMode"
 import toast from "react-hot-toast"
 
 export const DoctorLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
+  const [darkMode, setDarkMode] = useDarkMode(true)
   const { logout, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()

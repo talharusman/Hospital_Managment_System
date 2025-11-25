@@ -1,14 +1,15 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { billingAPI } from "../../services/api"
 import toast from "react-hot-toast"
-import { CreditCard, CheckCircle } from "lucide-react"
+import { CheckCircle, CreditCard, Search } from "lucide-react"
 
 export const PaymentsPage = () => {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
   const [formData, setFormData] = useState({
     invoiceId: "",
     amount: "",
@@ -25,7 +26,8 @@ export const PaymentsPage = () => {
   const fetchPayments = async () => {
     try {
       const response = await billingAPI.getPaymentHistory()
-      setPayments(response.data)
+      const payload = Array.isArray(response.data) ? response.data : []
+      setPayments(payload)
     } catch (error) {
       // Mock data
       setPayments([
@@ -53,6 +55,29 @@ export const PaymentsPage = () => {
     }
   }
 
+  const normalizedPayments = useMemo(() => {
+    return payments.map((payment) => ({
+      ...payment,
+      patientName: payment.patientName || payment.patient || "Unknown",
+      method: payment.method || payment.paymentMethod || "Online",
+      amount: Number.isFinite(payment.amount) ? payment.amount : Number.parseFloat(payment.amount) || 0,
+    }))
+  }, [payments])
+
+  const filteredPayments = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return normalizedPayments
+    }
+    const query = searchQuery.trim().toLowerCase()
+    return normalizedPayments.filter((payment) =>
+      [payment.patientName, payment.invoiceId, payment.method]
+        .filter((value) => value !== null && value !== undefined)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    )
+  }, [normalizedPayments, searchQuery])
+
+  const hasFilteredPayments = filteredPayments.length > 0
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
@@ -76,33 +101,48 @@ export const PaymentsPage = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary"></div>
       </div>
     )
   }
 
   return (
-    <div className="p-8 bg-gray-100 min-h-screen">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800">Payments</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
-        >
-          <CreditCard size={20} /> Process Payment
-        </button>
+    <div className="min-h-screen bg-background p-6 md:p-10">
+      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Payments</h1>
+          <p className="text-sm text-muted-foreground">Search patient transactions or log a new payment.</p>
+        </div>
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search patient name"
+              className="w-full rounded-full border border-border bg-background py-2 pl-9 pr-4 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="inline-flex items-center gap-2 rounded-full border border-primary bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
+          >
+            <CreditCard size={18} /> Process payment
+          </button>
+        </div>
       </div>
 
       {showForm && (
-        <div className="bg-white rounded-lg shadow p-8 mb-8">
-          <h2 className="text-xl font-semibold mb-6">Process Payment</h2>
+        <div className="mb-8 rounded-3xl border border-border bg-card p-8 shadow-sm">
+          <h2 className="text-xl font-semibold text-foreground mb-6">Process Payment</h2>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <select
                 value={formData.invoiceId}
                 onChange={(e) => setFormData({ ...formData, invoiceId: e.target.value })}
                 required
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
               >
                 <option value="">Select Invoice</option>
                 <option value="INV-2024-002">INV-2024-002 - Jane Smith - $200.00</option>
@@ -116,22 +156,22 @@ export const PaymentsPage = () => {
                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                 step="0.01"
                 required
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">Payment Method</label>
+              <label className="mb-3 block text-sm font-semibold text-muted-foreground">Payment Method</label>
               <div className="grid grid-cols-3 gap-3">
                 {["card", "bank", "cash"].map((method) => (
                   <button
                     key={method}
                     type="button"
                     onClick={() => setFormData({ ...formData, paymentMethod: method })}
-                    className={`py-3 rounded-lg font-semibold capitalize transition ${
+                    className={`rounded-2xl px-4 py-3 font-semibold capitalize transition ${
                       formData.paymentMethod === method
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "border border-border bg-background text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     {method}
@@ -141,14 +181,14 @@ export const PaymentsPage = () => {
             </div>
 
             {formData.paymentMethod === "card" && (
-              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+              <div className="space-y-4 rounded-2xl border border-border bg-muted/40 p-4">
                 <input
                   type="text"
                   placeholder="Card Number"
                   value={formData.cardNumber}
                   onChange={(e) => setFormData({ ...formData, cardNumber: e.target.value })}
                   required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
                 <div className="grid grid-cols-2 gap-4">
                   <input
@@ -157,7 +197,7 @@ export const PaymentsPage = () => {
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
                     required
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                   <input
                     type="text"
@@ -165,7 +205,7 @@ export const PaymentsPage = () => {
                     value={formData.cvv}
                     onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
                     required
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
                   />
                 </div>
               </div>
@@ -174,14 +214,14 @@ export const PaymentsPage = () => {
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-2 rounded-lg font-semibold"
+                className="flex items-center gap-2 rounded-full bg-primary px-6 py-2 font-semibold text-primary-foreground transition hover:bg-primary/90"
               >
                 <CheckCircle size={20} /> Process Payment
               </button>
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded-lg font-semibold"
+                className="rounded-full bg-muted px-6 py-2 font-semibold text-foreground transition hover:bg-muted/80"
               >
                 Cancel
               </button>
@@ -191,40 +231,50 @@ export const PaymentsPage = () => {
       )}
 
       {/* Payment History */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-800">Payment History</h2>
+      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
+        <div className="border-b border-border p-6">
+          <h2 className="text-xl font-semibold text-foreground">Payment History</h2>
         </div>
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Payment ID</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Invoice ID</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Patient</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Amount</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Method</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Date</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map((payment) => (
-              <tr key={payment.id} className="border-b border-gray-200 hover:bg-gray-50">
-                <td className="px-6 py-4 font-semibold text-gray-800">{payment.id}</td>
-                <td className="px-6 py-4 text-gray-600">{payment.invoiceId}</td>
-                <td className="px-6 py-4 text-gray-600">{payment.patientName}</td>
-                <td className="px-6 py-4 font-semibold text-gray-800">${payment.amount.toFixed(2)}</td>
-                <td className="px-6 py-4 text-gray-600">{payment.method}</td>
-                <td className="px-6 py-4 text-gray-600">{payment.date}</td>
-                <td className="px-6 py-4">
-                  <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                    {payment.status}
-                  </span>
-                </td>
+        {hasFilteredPayments ? (
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted/60">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Payment ID</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Invoice ID</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Patient</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Method</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-semibold text-muted-foreground">Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredPayments.map((payment) => (
+                <tr key={payment.id} className="border-b border-border transition hover:bg-muted/40">
+                  <td className="px-6 py-4 font-semibold text-foreground">{payment.id}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{payment.invoiceId}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{payment.patientName}</td>
+                  <td className="px-6 py-4 font-semibold text-foreground">
+                    ${Number(payment.amount || 0).toFixed(2)}
+                  </td>
+                  <td className="px-6 py-4 text-muted-foreground">{payment.method}</td>
+                  <td className="px-6 py-4 text-muted-foreground">{payment.date}</td>
+                  <td className="px-6 py-4">
+                    <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-500">
+                      {payment.status || "Completed"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="p-6 text-center text-sm text-muted-foreground">
+            No patient payments found for
+            {" "}
+            <span className="font-semibold text-foreground">“{searchQuery.trim()}”</span>.
+          </div>
+        )}
       </div>
     </div>
   )

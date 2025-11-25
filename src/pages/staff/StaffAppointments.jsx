@@ -18,9 +18,6 @@ import {
   X,
   XCircle,
 } from "lucide-react"
-import { PageContainer } from "../../components/PageContainer"
-import { DashboardCard } from "../../components/DashboardCard"
-import { StatCard } from "../../components/StatCard"
 import { LoadingSpinner } from "../../components/LoadingSpinner"
 import { ErrorAlert } from "../../components/ErrorAlert"
 import { staffAPI } from "../../services/api"
@@ -289,6 +286,13 @@ export const StaffAppointments = () => {
     { title: "No-Show", value: statusCounts["no-show"], icon: AlertTriangle, color: "orange" },
   ]
 
+  const statAccent = {
+    blue: "bg-sky-500/15 text-sky-600",
+    green: "bg-emerald-500/15 text-emerald-600",
+    red: "bg-rose-500/15 text-rose-600",
+    orange: "bg-amber-500/15 text-amber-600",
+  }
+
   const statusButtonConfig = [
     {
       status: "completed",
@@ -463,7 +467,14 @@ export const StaffAppointments = () => {
     }
   }
 
-  if (loading) return <LoadingSpinner />
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center bg-background">
+        <LoadingSpinner />
+      </div>
+    )
+  }
+
   if (error) return <ErrorAlert message={error} onRetry={fetchAppointments} />
 
   const openAppointmentDialog = (appointmentId) => {
@@ -478,186 +489,249 @@ export const StaffAppointments = () => {
     }, 200)
   }
 
+  const statusFilterOptions = [
+    { value: "all", label: "All", count: appointments.length },
+    { value: "scheduled", label: "Scheduled", count: statusCounts.scheduled },
+    { value: "completed", label: "Completed", count: statusCounts.completed },
+    { value: "cancelled", label: "Cancelled", count: statusCounts.cancelled },
+    { value: "no-show", label: "No-show", count: statusCounts["no-show"] },
+  ]
+
+  const hasActiveFilters =
+    filters.search.trim() || filters.status !== "all" || filters.department !== "all" || filters.timeframe !== "all"
+
+  const emptyMessage = hasActiveFilters
+    ? "No appointments match the current filters."
+    : "No appointments scheduled yet."
+
   return (
-    <div style={themeFallbackVars}>
-      <PageContainer
-      title="Appointments"
-      description="Coordinate arrivals, handle last-minute changes, and keep the queue moving."
-      contentClassName="space-y-6 bg-transparent border-none shadow-none p-0"
-    >
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => (
-          <StatCard key={card.title} {...card} />
+    <div className="min-h-screen bg-background p-6 md:p-10" style={themeFallbackVars}>
+      <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Appointments</h1>
+          <p className="text-sm text-muted-foreground">
+            Coordinate arrivals, handle last-minute changes, and keep the queue moving.
+          </p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              value={filters.search}
+              onChange={(event) => handleFilterChange("search", event.target.value)}
+              placeholder="Search patient, doctor, or reason"
+              className="w-full rounded-full border border-border bg-background py-2 pl-9 pr-4 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-primary bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Refreshing" : "Refresh"}
+          </button>
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-foreground disabled:cursor-not-allowed"
+          >
+            <Download className="h-4 w-4" /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((card) => {
+          const accent = statAccent[card.color] || statAccent.blue
+          const Icon = card.icon
+          return (
+            <div key={card.title} className="rounded-3xl border border-border/70 bg-card/90 p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{card.title}</p>
+                  <p className="mt-3 text-3xl font-semibold text-foreground">{card.value}</p>
+                </div>
+                <span className={`inline-flex h-12 w-12 items-center justify-center rounded-2xl ${accent}`}>
+                  <Icon className="h-6 w-6" />
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {statusFilterOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => handleFilterChange("status", option.value)}
+            className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+              filters.status === option.value
+                ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                : "border-border bg-muted/50 text-foreground hover:bg-muted"
+            }`}
+          >
+            {option.label} ({option.count})
+          </button>
         ))}
       </div>
 
-      <DashboardCard className="bg-card/70 backdrop-blur-sm" title="Queue controls">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="grid w-full gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Search
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70" />
-                <input
-                  value={filters.search}
-                  onChange={(event) => handleFilterChange("search", event.target.value)}
-                  placeholder="Patient, doctor, or reason"
-                  className="w-full rounded-xl border border-border/70 bg-background py-2 pl-9 pr-3 text-sm text-foreground shadow-sm outline-none ring-offset-background transition focus:border-primary focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-            </label>
-
-            <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Status
-              <select
-                value={filters.status}
-                onChange={(event) => handleFilterChange("status", event.target.value)}
-                className="w-full rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none ring-offset-background transition focus:border-primary focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="all">All statuses</option>
-                <option value="scheduled">Scheduled</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="no-show">No-show</option>
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Department
-              <select
-                value={filters.department}
-                onChange={(event) => handleFilterChange("department", event.target.value)}
-                className="w-full rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none ring-offset-background transition focus:border-primary focus:ring-2 focus:ring-primary/30"
-              >
-                <option value="all">All departments</option>
-                {departments.map((department) => (
-                  <option key={department} value={department}>
-                    {department}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Timeframe
-              <select
-                value={filters.timeframe}
-                onChange={(event) => handleFilterChange("timeframe", event.target.value)}
-                className="w-full rounded-xl border border-border/70 bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none ring-offset-background transition focus:border-primary focus:ring-2 focus:ring-primary/30"
-              >
-                {timeframeOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-2">
+          {timeframeOptions.map((option) => (
             <button
+              key={option.value}
               type="button"
-              onClick={handleResetFilters}
-              className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-background px-6 py-3 text-sm font-semibold text-foreground shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 hover:border-primary/40"
+              onClick={() => handleFilterChange("timeframe", option.value)}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                filters.timeframe === option.value
+                  ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 shadow-sm"
+                  : "border-border bg-muted/40 text-foreground hover:bg-muted"
+              }`}
             >
-              Clear filters
+              {option.label}
             </button>
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-2 rounded-full border border-primary bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} /> {isRefreshing ? "Refreshing" : "Refresh"}
-            </button>
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={isExporting}
-              className="inline-flex items-center gap-2 rounded-full border border-emerald-400 bg-emerald-500 px-6 py-3 text-sm font-semibold text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 focus-visible:ring-offset-2 hover:bg-emerald-500/90 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Download className="h-4 w-4" /> Export CSV
-            </button>
-          </div>
+          ))}
         </div>
-      </DashboardCard>
 
-      <section className="grid gap-6 xl:grid-cols-[2fr,1fr]">
-        <DashboardCard className="bg-card/70 backdrop-blur-sm" title="Appointment queue">
-          {filteredAppointments.length === 0 ? (
-            <div className="flex min-h-[220px] items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/60 px-6 text-sm text-muted-foreground">
-              No appointments match the selected filters.
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-3">
-              {filteredAppointments.map((appointment) => (
-                <button
-                  key={appointment.id}
-                  type="button"
+        <select
+          value={filters.department}
+          onChange={(event) => handleFilterChange("department", event.target.value)}
+          className="rounded-full border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+        >
+          <option value="all">All departments</option>
+          {departments.map((department) => (
+            <option key={department} value={department}>
+              {department}
+            </option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={handleResetFilters}
+          className="inline-flex items-center justify-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-foreground"
+        >
+          Clear filters
+        </button>
+      </div>
+
+      {filteredAppointments.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-border/60 bg-card/60 py-16 text-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          {filteredAppointments.map((appointment) => {
+            const statusKey = (appointment.status || "scheduled").toLowerCase()
+            const badgeClass = statusBadgeStyles[statusKey] || statusBadgeStyles.scheduled
+            const dateTime = getAppointmentDateTime(appointment)
+            const timingLabel = describeTimeUntil(dateTime)
+
+            return (
+              <div key={appointment.id}>
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openAppointmentDialog(appointment.id)}
-                  className="group flex h-full flex-col justify-between rounded-3xl border border-(--appointment-card-border) bg-(--appointment-card) p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_18px_48px_rgba(11,19,42,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      openAppointmentDialog(appointment.id)
+                    }
+                  }}
+                  className="flex h-full cursor-pointer flex-col rounded-3xl border border-border/70 bg-card/90 p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md focus-visible:outline focus-visible:outline-primary focus-visible:outline-offset-2"
                 >
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Patient</p>
-                      <p className="text-lg font-semibold text-foreground">{appointment.patientName || "—"}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Appointment #{appointment.id}</p>
+                      <h3 className="mt-1 text-lg font-semibold text-foreground">{appointment.patientName || "Unknown"}</h3>
+                      <p className="text-sm text-muted-foreground">with {appointment.doctorName || "Unassigned"}</p>
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Doctor</p>
-                      <p className="text-sm font-medium text-foreground/90">{appointment.doctorName || "—"}</p>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+                      {formatStatusLabel(appointment.status)}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 space-y-3 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-foreground">
+                      <CalendarDays size={16} />
+                      <span>{formatDate(appointment.appointmentDate)}</span>
                     </div>
-                  </div>
-                  <div className="mt-6 flex justify-end">
-                    <span className="text-xs font-semibold text-primary/80 transition group-hover:text-primary">Open details →</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </DashboardCard>
-
-        <div className="space-y-6">
-          <DashboardCard className="bg-card/70 backdrop-blur-sm" title="Up next">
-            {upcomingAppointments.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No upcoming appointments scheduled.</p>
-            ) : (
-              <ul className="space-y-4">
-                {upcomingAppointments.map((appointment) => {
-                  const dateTime = getAppointmentDateTime(appointment)
-                  const statusKey = (appointment.status || "scheduled").toLowerCase()
-                  const badgeClass = statusBadgeStyles[statusKey] || statusBadgeStyles.scheduled
-
-                  return (
-                    <li key={`up-next-${appointment.id}`} className="rounded-2xl border border-border/60 bg-background/60 p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-foreground">{appointment.patientName}</p>
-                          <p className="text-xs text-muted-foreground">with {appointment.doctorName}</p>
-                        </div>
-                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClass}`}>
-                          {formatStatusLabel(appointment.status)}
-                        </span>
+                    <div className="flex items-center gap-2 text-foreground">
+                      <Clock3 size={16} />
+                      <span>{formatTime(appointment.appointmentTime)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-foreground">
+                      <CalendarClock size={16} />
+                      <span>{timingLabel || "Timing unavailable"}</span>
+                    </div>
+                    {appointment.reason && (
+                      <div className="flex items-center gap-2 text-foreground/80">
+                        <NotebookPen size={16} />
+                        <span className="line-clamp-2">{appointment.reason}</span>
                       </div>
-                      <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <CalendarDays className="h-3.5 w-3.5" /> {formatDate(appointment.appointmentDate)}
-                        </span>
-                        <span className="inline-flex items-center gap-1">
-                          <Clock3 className="h-3.5 w-3.5" /> {formatTime(appointment.appointmentTime)}
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-foreground/80">
-                          {describeTimeUntil(dateTime)}
-                        </span>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </DashboardCard>
-
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
-      </section>
+      )}
+
+      <div className="mt-10 rounded-3xl border border-border/70 bg-card/90 p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">Upcoming arrivals</h2>
+            <p className="text-sm text-muted-foreground">Keep an eye on what is coming up next.</p>
+          </div>
+        </div>
+        {upcomingAppointments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No upcoming appointments scheduled.</p>
+        ) : (
+          <ul className="space-y-4">
+            {upcomingAppointments.map((appointment) => {
+              const dateTime = getAppointmentDateTime(appointment)
+              const statusKey = (appointment.status || "scheduled").toLowerCase()
+              const badgeClass = statusBadgeStyles[statusKey] || statusBadgeStyles.scheduled
+
+              return (
+                <li
+                  key={`upcoming-${appointment.id}`}
+                  className="rounded-2xl border border-border/60 bg-muted/40 p-4"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{appointment.patientName}</p>
+                      <p className="text-xs text-muted-foreground">with {appointment.doctorName}</p>
+                    </div>
+                    <span className={`inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold ${badgeClass}`}>
+                      {formatStatusLabel(appointment.status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <CalendarDays className="h-3.5 w-3.5" /> {formatDate(appointment.appointmentDate)}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 className="h-3.5 w-3.5" /> {formatTime(appointment.appointmentTime)}
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-foreground/80">
+                      {describeTimeUntil(dateTime)}
+                    </span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>
 
       {isDialogOpen && selectedAppointment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm" onClick={closeDialog}>
@@ -740,7 +814,9 @@ export const StaffAppointments = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <CalendarClock className="h-4 w-4 text-primary" />
-                    <span>{formatStatusLabel(selectedAppointment.status)} · {selectedAppointment.departmentName || "Unassigned"}</span>
+                    <span>
+                      {formatStatusLabel(selectedAppointment.status)} · {selectedAppointment.departmentName || "Unassigned"}
+                    </span>
                   </div>
                   {selectedAppointment.reason && (
                     <div className="flex items-start gap-2">
@@ -827,7 +903,6 @@ export const StaffAppointments = () => {
           </div>
         </div>
       )}
-      </PageContainer>
     </div>
   )
 }

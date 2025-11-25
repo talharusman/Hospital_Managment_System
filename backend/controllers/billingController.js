@@ -7,6 +7,81 @@ const normalizePaymentMethod = (method) => {
   return method.trim().toLowerCase().replace(/\s+/g, "_")
 }
 
+const toTitleCase = (value, fallback = "") => {
+  if (!value || typeof value !== "string") {
+    return fallback
+  }
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ")
+}
+
+const normalizeStatus = (status, fallback = "Pending") => {
+  if (!status || typeof status !== "string") {
+    return fallback
+  }
+  const trimmed = status.trim().toLowerCase()
+  if (!trimmed) {
+    return fallback
+  }
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1)
+}
+
+const parseAmount = (amount) => {
+  const numeric = Number.parseFloat(amount)
+  if (Number.isNaN(numeric) || !Number.isFinite(numeric)) {
+    return 0
+  }
+  return Number(numeric.toFixed(2))
+}
+
+const formatDateOnly = (value) => {
+  if (!value) {
+    return null
+  }
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return date.toISOString().split("T")[0]
+}
+
+const normalizeInvoiceRecord = (invoice) => {
+  if (!invoice) {
+    return null
+  }
+  return {
+    id: invoice.id,
+    patientId: invoice.patient_id,
+    patientName: invoice.patient_name,
+    amount: parseAmount(invoice.amount),
+    status: normalizeStatus(invoice.status, "Pending"),
+    date: formatDateOnly(invoice.created_at),
+    dueDate: formatDateOnly(invoice.due_date),
+    description: invoice.description || "",
+    notes: invoice.notes || "",
+    items: Array.isArray(invoice.items) ? invoice.items : [],
+  }
+}
+
+const normalizePaymentRecord = (payment) => {
+  if (!payment) {
+    return null
+  }
+  return {
+    id: payment.id,
+    invoiceId: payment.invoice_id,
+    patientId: payment.patient_id,
+    patientName: payment.patient_name,
+    amount: parseAmount(payment.amount_paid),
+    method: toTitleCase(payment.payment_method, "Online"),
+    date: formatDateOnly(payment.payment_date),
+    status: normalizeStatus(payment.status || "Completed", "Completed"),
+  }
+}
+
 // Create invoice
 exports.createInvoice = async (req, res) => {
   const { patient_id, amount, description, due_date } = req.body || {}
@@ -52,9 +127,45 @@ exports.getInvoices = async (req, res) => {
     query += " ORDER BY i.created_at DESC"
 
     const [invoices] = await connection.query(query, params)
-    res.json(invoices)
+    const normalizedInvoices = invoices.map(normalizeInvoiceRecord).filter(Boolean)
+    res.json(normalizedInvoices)
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch invoices", error: error.message })
+  } finally {
+    if (connection) connection.release()
+  }
+}
+
+// Get invoice by id
+exports.getInvoiceById = async (req, res) => {
+  const { id } = req.params || {}
+
+  if (!id) {
+    return res.status(400).json({ message: "Invoice id is required" })
+  }
+
+  let connection
+  try {
+    connection = await pool.getConnection()
+
+    const [rows] = await connection.query(
+      `SELECT i.*, u.name AS patient_name
+         FROM invoices i
+         JOIN patients p ON i.patient_id = p.id
+         JOIN users u ON p.user_id = u.id
+        WHERE i.id = ?
+        LIMIT 1`,
+      [id],
+    )
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ message: "Invoice not found" })
+    }
+
+    const normalizedInvoice = normalizeInvoiceRecord(rows[0])
+    res.json(normalizedInvoice)
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch invoice", error: error.message })
   } finally {
     if (connection) connection.release()
   }
@@ -163,7 +274,8 @@ exports.getPayments = async (req, res) => {
      ORDER BY pay.payment_date DESC`,
     )
 
-    res.json(payments)
+    const normalizedPayments = payments.map(normalizePaymentRecord).filter(Boolean)
+    res.json(normalizedPayments)
   } catch (error) {
     res.status(500).json({ message: "Failed to fetch payments", error: error.message })
   } finally {

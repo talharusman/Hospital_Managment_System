@@ -23,9 +23,17 @@ export const BillingDashboard = () => {
       setLoading(true)
       setError(null)
       const response = await billingAPI.getInvoices()
-      const paid = response.data.filter((i) => i.status === "Paid").length
-      const pending = response.data.filter((i) => i.status === "Pending").length
-      const totalAmount = response.data.reduce((sum, i) => sum + Number.parseFloat(i.amount?.replace("$", "") || 0), 0)
+      const normalizeAmount = (value) => {
+        if (typeof value === "number") {
+          return Number.isFinite(value) ? value : 0
+        }
+        const parsed = Number.parseFloat(String(value ?? "").replace(/[^0-9.-]+/g, ""))
+        return Number.isFinite(parsed) ? parsed : 0
+      }
+
+      const paid = response.data.filter((invoice) => invoice.status === "Paid").length
+      const pending = response.data.filter((invoice) => invoice.status === "Pending").length
+      const totalAmount = response.data.reduce((sum, invoice) => sum + normalizeAmount(invoice.amount), 0)
 
       setStats({
         totalInvoices: response.data.length,

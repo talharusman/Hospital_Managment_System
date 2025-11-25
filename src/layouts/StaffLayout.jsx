@@ -2,13 +2,27 @@
 
 import { useState } from "react"
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
-import { LayoutDashboard, CalendarDays, Users2, Menu, X, LogOut, Moon, Sun } from "lucide-react"
+import {
+  LayoutDashboard,
+  CalendarDays,
+  Users2,
+  Menu,
+  X,
+  LogOut,
+  Moon,
+  Sun,
+  ReceiptText,
+  CircleDollarSign,
+  FilePlus2,
+  CreditCard,
+} from "lucide-react"
 import { useAuth } from "../hooks/useAuth"
+import { useDarkMode } from "../hooks/useDarkMode"
 import toast from "react-hot-toast"
 
 export const StaffLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
+  const [darkMode, setDarkMode] = useDarkMode(true)
   const { logout, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -42,6 +56,10 @@ export const StaffLayout = () => {
     { name: "Dashboard", path: "/staff/dashboard", icon: LayoutDashboard },
     { name: "Appointments", path: "/staff/appointments", icon: CalendarDays },
     { name: "Patient Management", path: "/staff/patients", icon: Users2 },
+    { name: "Billing Dashboard", path: "/staff/billing/dashboard", icon: ReceiptText },
+    { name: "Invoices", path: "/staff/billing/invoices", icon: CircleDollarSign },
+    { name: "Create Invoice", path: "/staff/billing/create", icon: FilePlus2 },
+    { name: "Payments", path: "/staff/billing/payments", icon: CreditCard },
   ]
 
   return (

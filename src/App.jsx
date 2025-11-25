@@ -73,6 +73,10 @@ function App() {
             <Route path="users" element={<ManageUsersPage />} />
             <Route path="departments" element={<ManageDepartmentsPage />} />
             <Route path="reports" element={<AdminReportsPage />} />
+            <Route path="billing/dashboard" element={<BillingDashboard />} />
+            <Route path="billing/invoices" element={<InvoicesListPage />} />
+            <Route path="billing/create" element={<CreateInvoicePage />} />
+            <Route path="billing/payments" element={<PaymentsPage />} />
           </Route>
 
           {/* Doctor Routes */}
@@ -137,6 +141,8 @@ function App() {
             <Route path="medicines" element={<MedicinesPage />} />
             <Route path="dispensing" element={<DispensingPage />} />
             <Route path="low-stock" element={<LowStockAlertsPage />} />
+            <Route path="invoices" element={<InvoicesListPage />} />
+            <Route path="payments" element={<PaymentsPage />} />
           </Route>
 
           {/* Billing Routes */}
@@ -166,6 +172,10 @@ function App() {
             <Route path="dashboard" element={<StaffDashboard />} />
             <Route path="appointments" element={<StaffAppointments />} />
             <Route path="patients" element={<StaffPatients />} />
+            <Route path="billing/dashboard" element={<BillingDashboard />} />
+            <Route path="billing/invoices" element={<InvoicesListPage />} />
+            <Route path="billing/create" element={<CreateInvoicePage />} />
+            <Route path="billing/payments" element={<PaymentsPage />} />
           </Route>
 
           {/* Lab Technician Routes */}

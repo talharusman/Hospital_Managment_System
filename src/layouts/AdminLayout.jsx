@@ -12,13 +12,18 @@ import {
   Users2,
   Building2,
   FileText,
+  ReceiptText,
+  CircleDollarSign,
+  CreditCard,
+  FilePlus2,
 } from "lucide-react"
 import { useAuth } from "../hooks/useAuth"
+import { useDarkMode } from "../hooks/useDarkMode"
 import toast from "react-hot-toast"
 
 export const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [darkMode, setDarkMode] = useState(false)
+  const [darkMode, setDarkMode] = useDarkMode(true)
   const { logout, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -58,6 +63,10 @@ export const AdminLayout = () => {
     { name: "Manage Users", path: "/admin/users", icon: Users2 },
     { name: "Departments", path: "/admin/departments", icon: Building2 },
     { name: "Operational Reports", path: "/admin/reports", icon: FileText },
+    { name: "Billing Dashboard", path: "/admin/billing/dashboard", icon: ReceiptText },
+    { name: "Invoices", path: "/admin/billing/invoices", icon: CircleDollarSign },
+    { name: "Create Invoice", path: "/admin/billing/create", icon: FilePlus2 },
+    { name: "Payments", path: "/admin/billing/payments", icon: CreditCard },
   ]
 
   return (

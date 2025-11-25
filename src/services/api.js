@@ -63,8 +63,11 @@ export const patientAPI = {
   bookAppointment: (data) => api.post("/patient/appointments", data),
   getAppointments: () => api.get("/patient/appointments"),
   getAppointmentById: (id) => api.get(`/patient/appointments/${id}`),
-  cancelAppointment: (id) => api.put(`/patient/appointments/${id}`, { status: "cancelled" }),
+  cancelAppointment: (id) => api.patch(`/patient/appointments/${id}/cancel`),
   rescheduleAppointment: (id, data) => api.put(`/patient/appointments/${id}`, data),
+  getDoctors: () => api.get("/patient/doctors"),
+  getDoctorAvailability: (doctorId, date) =>
+    api.get(`/patient/doctors/${doctorId}/availability`, { params: { date } }),
   getPrescriptions: () => api.get("/patient/prescriptions"),
   getLabReports: () => api.get("/patient/lab-reports"),
   getInvoices: () => api.get("/patient/invoices"),
