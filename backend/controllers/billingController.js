@@ -107,6 +107,86 @@ exports.createInvoice = async (req, res) => {
   }
 }
 
+// Update existing invoice (append amount/description)
+exports.updateInvoice = async (req, res) => {
+  const invoiceId = Number.parseInt(req.params?.id, 10)
+  const amountDeltaInput =
+    req.body?.amount_delta ?? req.body?.amountDelta ?? req.body?.amount ?? req.body?.amount_change
+  const descriptionAppend =
+    req.body?.description_append ?? req.body?.descriptionAppend ?? req.body?.description_line ?? req.body?.description
+
+  if (!Number.isInteger(invoiceId) || invoiceId <= 0) {
+    return res.status(400).json({ message: "Valid invoice id is required" })
+  }
+
+  const amountDelta = Number.parseFloat(amountDeltaInput)
+  if (!Number.isFinite(amountDelta) || amountDelta <= 0) {
+    return res.status(400).json({ message: "A positive amount_delta is required" })
+  }
+
+  let connection
+  try {
+    connection = await pool.getConnection()
+    await connection.beginTransaction()
+
+    const [rows] = await connection.query(
+      `SELECT i.*, u.name AS patient_name
+         FROM invoices i
+         JOIN patients p ON i.patient_id = p.id
+         JOIN users u ON p.user_id = u.id
+        WHERE i.id = ?
+        FOR UPDATE`,
+      [invoiceId],
+    )
+
+    if (!rows || rows.length === 0) {
+      await connection.rollback()
+      return res.status(404).json({ message: "Invoice not found" })
+    }
+
+    const invoice = rows[0]
+
+    const currentAmount = parseAmount(invoice.amount)
+    const updatedAmount = Number.parseFloat((currentAmount + amountDelta).toFixed(2))
+
+    const descriptionParts = []
+    if (invoice.description) {
+      descriptionParts.push(invoice.description)
+    }
+    if (descriptionAppend) {
+      descriptionParts.push(descriptionAppend)
+    }
+
+    const mergedDescription = descriptionParts.join("\n").trim()
+
+    await connection.query(
+      "UPDATE invoices SET amount = ?, description = ? WHERE id = ?",
+      [updatedAmount, mergedDescription || null, invoiceId],
+    )
+
+    await connection.commit()
+
+    const updatedInvoice = normalizeInvoiceRecord({
+      ...invoice,
+      amount: updatedAmount,
+      description: mergedDescription || null,
+    })
+
+    res.json({ message: "Invoice updated successfully", invoice: updatedInvoice })
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback()
+      } catch (rollbackError) {
+        console.error("Failed to rollback invoice update", rollbackError)
+      }
+    }
+    res.status(500).json({ message: "Failed to update invoice", error: error.message })
+  } finally {
+    if (connection) connection.release()
+  }
+}
+
 // Get invoices
 exports.getInvoices = async (req, res) => {
   const { patient_id } = req.query || {}

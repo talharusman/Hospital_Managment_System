@@ -13,6 +13,7 @@ import {
   Upload,
   FileText,
   Users2,
+  CircleDollarSign,
 } from "lucide-react"
 import { useAuth } from "../hooks/useAuth"
 import { useDarkMode } from "../hooks/useDarkMode"
@@ -59,6 +60,7 @@ export const LabLayout = () => {
     { name: "Dashboard", path: "/lab/dashboard", icon: LayoutGrid },
     { name: "Test Requests", path: "/lab/tests", icon: ClipboardList },
     { name: "Upload Reports", path: "/lab/upload-reports", icon: Upload },
+    { name: "Billing", path: "/lab/billing", icon: CircleDollarSign },
     { name: "Completed Reports", path: "/lab/completed", icon: FileText },
     { name: "Patients", path: "/lab/patients", icon: Users2 },
   ]

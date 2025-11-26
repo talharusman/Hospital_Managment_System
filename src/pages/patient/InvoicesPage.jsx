@@ -218,14 +218,6 @@ export const InvoicesPage = () => {
               >
                 <Download size={16} /> Download invoice
               </button>
-              {selectedInvoice.status === "Pending" && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-2 rounded-full border border-emerald-500 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/15"
-                >
-                  <DollarSign size={16} /> Pay now
-                </button>
-              )}
               <button
                 type="button"
                 onClick={closeDetails}

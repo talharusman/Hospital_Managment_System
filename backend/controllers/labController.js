@@ -15,6 +15,28 @@ const formatStatus = (status) => {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }
 
+const normalizeCurrency = (value) => {
+  if (value === null || value === undefined) return null
+  const numeric = Number.parseFloat(value)
+  if (!Number.isFinite(numeric)) return null
+  return Number.parseFloat(numeric.toFixed(2))
+}
+
+const toPositiveCurrency = (value) => {
+  const normalized = normalizeCurrency(value)
+  if (normalized === null || normalized <= 0) {
+    return null
+  }
+  return normalized
+}
+
+const formatTimestamp = (value) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
 const formatTestRequest = (row) => ({
   id: row.id,
   testName: row.test_type,
@@ -32,6 +54,9 @@ const formatTestRequest = (row) => ({
   reportData: row.report_data || null,
   reportFilePath: row.report_file_path || null,
   reportDate: formatDate(row.report_created_at),
+  billingAmount: normalizeCurrency(row.billing_amount),
+  billingInvoiceId: row.billing_invoice_id || null,
+  billedAt: formatTimestamp(row.billed_at),
 })
 
 const fetchTestRequestById = async (connection, id) => {
@@ -40,6 +65,9 @@ const fetchTestRequestById = async (connection, id) => {
             t.test_type,
             t.description,
             t.status,
+          t.billing_amount,
+          t.billing_invoice_id,
+          t.billed_at,
             t.created_at,
             p.id AS patient_id,
             uPatient.name AS patient_name,
@@ -77,6 +105,9 @@ exports.listTestRequests = async (req, res) => {
             t.test_type,
             t.description,
             t.status,
+          t.billing_amount,
+          t.billing_invoice_id,
+          t.billed_at,
             t.created_at,
             p.id AS patient_id,
             uPatient.name AS patient_name,
@@ -260,6 +291,152 @@ exports.uploadLabReport = async (req, res) => {
     }
     console.error("Failed to upload lab report", error)
     res.status(500).json({ message: "Failed to upload lab report", error: error.message })
+  } finally {
+    if (connection) connection.release()
+  }
+}
+
+exports.billTestRequest = async (req, res) => {
+  const testId = Number.parseInt(req.params?.id, 10)
+  if (!Number.isInteger(testId) || testId <= 0) {
+    return res.status(400).json({ message: "Valid test request id is required" })
+  }
+
+  const chargeAmount =
+    toPositiveCurrency(req.body?.amount) ??
+    toPositiveCurrency(req.body?.amount_paid) ??
+    toPositiveCurrency(req.body?.charge) ??
+    toPositiveCurrency(req.body?.chargeAmount)
+
+  if (chargeAmount === null) {
+    return res.status(400).json({ message: "A positive amount is required" })
+  }
+
+  const descriptionInput =
+    req.body?.description ?? req.body?.notes ?? req.body?.line_item ?? req.body?.lineItem ?? null
+  const dueDateInput = req.body?.dueDate ?? req.body?.due_date ?? null
+  const trimmedDueDate = dueDateInput && `${dueDateInput}`.trim()
+  const dueDateNormalized =
+    trimmedDueDate && /^\d{4}-\d{2}-\d{2}$/.test(trimmedDueDate) ? trimmedDueDate : null
+
+  let connection
+  try {
+    connection = await pool.getConnection()
+    await connection.beginTransaction()
+
+    const [rows] = await connection.query(
+      `SELECT t.id,
+              t.test_type,
+              t.status,
+              t.billing_invoice_id,
+              p.id  AS patient_id,
+              u.name AS patient_name
+         FROM test_requests t
+         JOIN patients p ON t.patient_id = p.id
+         JOIN users u ON p.user_id = u.id
+        WHERE t.id = ?
+        FOR UPDATE`,
+      [testId],
+    )
+
+    if (!rows || rows.length === 0) {
+      await connection.rollback()
+      return res.status(404).json({ message: "Test request not found" })
+    }
+
+    const test = rows[0]
+
+    if (test.status !== "completed") {
+      await connection.rollback()
+      return res.status(400).json({ message: "Only completed lab reports can be billed" })
+    }
+
+    const descriptionLine = (descriptionInput || "")
+      .toString()
+      .trim()
+      .replace(/\s+/g, " ") || `Lab charge: ${test.test_type}`
+
+    const [invoiceRows] = await connection.query(
+      `SELECT id, amount, description
+         FROM invoices
+        WHERE patient_id = ?
+          AND status = 'pending'
+     ORDER BY created_at DESC
+        LIMIT 1
+        FOR UPDATE`,
+      [test.patient_id],
+    )
+
+    let invoiceAction
+    let invoiceId
+
+    if (invoiceRows.length > 0) {
+      const invoice = invoiceRows[0]
+      const currentAmount = Number.parseFloat(invoice.amount) || 0
+      const updatedAmount = Number.parseFloat((currentAmount + chargeAmount).toFixed(2))
+      const mergedDescription = [invoice.description, descriptionLine].filter(Boolean).join("\n")
+
+      await connection.query("UPDATE invoices SET amount = ?, description = ? WHERE id = ?", [
+        updatedAmount,
+        mergedDescription || null,
+        invoice.id,
+      ])
+
+      invoiceAction = {
+        type: "updated",
+        invoiceId: invoice.id,
+        amountAppended: chargeAmount,
+        updatedTotal: updatedAmount,
+      }
+      invoiceId = invoice.id
+    } else {
+      const [insertResult] = await connection.query(
+        "INSERT INTO invoices (patient_id, amount, description, due_date, status, created_at) VALUES (?, ?, ?, ?, 'pending', NOW())",
+        [test.patient_id, chargeAmount, descriptionLine, dueDateNormalized],
+      )
+
+      invoiceAction = {
+        type: "created",
+        invoiceId: insertResult.insertId,
+        amountAppended: chargeAmount,
+        updatedTotal: chargeAmount,
+      }
+      invoiceId = insertResult.insertId
+    }
+
+    await connection.query(
+      `UPDATE test_requests
+          SET billing_amount = COALESCE(billing_amount, 0) + ?,
+              billing_invoice_id = ?,
+              billed_at = NOW()
+        WHERE id = ?`,
+      [chargeAmount, invoiceId, testId],
+    )
+
+    const updatedTest = await fetchTestRequestById(connection, testId)
+
+    await connection.commit()
+
+    const responseMessage =
+      invoiceAction.type === "updated"
+        ? "Lab charge applied to pending invoice"
+        : "Lab charge added and new invoice created"
+
+    res.status(201).json({
+      message: responseMessage,
+      invoiceAction,
+      test: updatedTest,
+    })
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback()
+      } catch (rollbackError) {
+        console.error("Failed to rollback lab billing", rollbackError)
+      }
+    }
+    console.error("Failed to bill lab test", error)
+    res.status(500).json({ message: "Failed to bill lab test", error: error.message })
   } finally {
     if (connection) connection.release()
   }

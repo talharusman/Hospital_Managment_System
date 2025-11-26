@@ -2,22 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { billingAPI } from "../../services/api"
-import toast from "react-hot-toast"
-import { CheckCircle, CreditCard, Search } from "lucide-react"
+import { Search } from "lucide-react"
 
 export const PaymentsPage = () => {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
-  const [formData, setFormData] = useState({
-    invoiceId: "",
-    amount: "",
-    paymentMethod: "card",
-    cardNumber: "",
-    expiryDate: "",
-    cvv: "",
-  })
 
   useEffect(() => {
     fetchPayments()
@@ -78,26 +68,6 @@ export const PaymentsPage = () => {
 
   const hasFilteredPayments = filteredPayments.length > 0
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    try {
-      await billingAPI.processPayment(formData)
-      toast.success("Payment processed successfully")
-      setShowForm(false)
-      setFormData({
-        invoiceId: "",
-        amount: "",
-        paymentMethod: "card",
-        cardNumber: "",
-        expiryDate: "",
-        cvv: "",
-      })
-      fetchPayments()
-    } catch (error) {
-      toast.error("Payment failed. Please try again.")
-    }
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -111,7 +81,7 @@ export const PaymentsPage = () => {
       <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Payments</h1>
-          <p className="text-sm text-muted-foreground">Search patient transactions or log a new payment.</p>
+          <p className="text-sm text-muted-foreground">Search and review recorded patient transactions.</p>
         </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="relative w-full md:w-72">
@@ -124,111 +94,8 @@ export const PaymentsPage = () => {
               className="w-full rounded-full border border-border bg-background py-2 pl-9 pr-4 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center gap-2 rounded-full border border-primary bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
-          >
-            <CreditCard size={18} /> Process payment
-          </button>
         </div>
       </div>
-
-      {showForm && (
-        <div className="mb-8 rounded-3xl border border-border bg-card p-8 shadow-sm">
-          <h2 className="text-xl font-semibold text-foreground mb-6">Process Payment</h2>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select
-                value={formData.invoiceId}
-                onChange={(e) => setFormData({ ...formData, invoiceId: e.target.value })}
-                required
-                className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <option value="">Select Invoice</option>
-                <option value="INV-2024-002">INV-2024-002 - Jane Smith - $200.00</option>
-                <option value="INV-2024-004">INV-2024-004 - New Invoice</option>
-              </select>
-
-              <input
-                type="number"
-                placeholder="Amount"
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                step="0.01"
-                required
-                className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
-            </div>
-
-            <div>
-              <label className="mb-3 block text-sm font-semibold text-muted-foreground">Payment Method</label>
-              <div className="grid grid-cols-3 gap-3">
-                {["card", "bank", "cash"].map((method) => (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, paymentMethod: method })}
-                    className={`rounded-2xl px-4 py-3 font-semibold capitalize transition ${
-                      formData.paymentMethod === method
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "border border-border bg-background text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {method}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {formData.paymentMethod === "card" && (
-              <div className="space-y-4 rounded-2xl border border-border bg-muted/40 p-4">
-                <input
-                  type="text"
-                  placeholder="Card Number"
-                  value={formData.cardNumber}
-                  onChange={(e) => setFormData({ ...formData, cardNumber: e.target.value })}
-                  required
-                  className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                />
-                <div className="grid grid-cols-2 gap-4">
-                  <input
-                    type="text"
-                    placeholder="MM/YY"
-                    value={formData.expiryDate}
-                    onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    required
-                    className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
-                  <input
-                    type="text"
-                    placeholder="CVV"
-                    value={formData.cvv}
-                    onChange={(e) => setFormData({ ...formData, cvv: e.target.value })}
-                    required
-                    className="w-full rounded-2xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                className="flex items-center gap-2 rounded-full bg-primary px-6 py-2 font-semibold text-primary-foreground transition hover:bg-primary/90"
-              >
-                <CheckCircle size={20} /> Process Payment
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowForm(false)}
-                className="rounded-full bg-muted px-6 py-2 font-semibold text-foreground transition hover:bg-muted/80"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* Payment History */}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">

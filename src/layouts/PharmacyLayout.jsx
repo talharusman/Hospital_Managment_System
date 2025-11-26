@@ -14,8 +14,6 @@ import {
   ClipboardList,
   AlertTriangle,
   Users2,
-  CircleDollarSign,
-  CreditCard,
 } from "lucide-react"
 import toast from "react-hot-toast"
 
@@ -64,8 +62,6 @@ export const PharmacyLayout = () => {
     { name: "Medicines", path: "/pharmacy/medicines", icon: Pill },
     { name: "Dispensing", path: "/pharmacy/dispensing", icon: ClipboardCheck },
     { name: "Low Stock", path: "/pharmacy/low-stock", icon: AlertTriangle },
-    { name: "Invoices", path: "/pharmacy/invoices", icon: CircleDollarSign },
-    { name: "Payments", path: "/pharmacy/payments", icon: CreditCard },
     { name: "Prescriptions", path: "/pharmacy/prescriptions", icon: ClipboardList, disabled: true },
   ]
 

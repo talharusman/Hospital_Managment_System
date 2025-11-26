@@ -5,6 +5,14 @@ const parseNumber = (value, defaultValue = 0) => {
   return Number.isNaN(parsed) ? defaultValue : parsed
 }
 
+const toPositiveCurrency = (value) => {
+  const numeric = Number.parseFloat(value)
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return null
+  }
+  return Number.parseFloat(numeric.toFixed(2))
+}
+
 // Get all medicines
 exports.getAllMedicines = async (req, res) => {
   let connection
@@ -184,7 +192,7 @@ exports.dispenseMedicine = async (req, res) => {
     await connection.beginTransaction()
 
     const [[medicine]] = await connection.query(
-      "SELECT id, name, quantity FROM medicines WHERE id = ? FOR UPDATE",
+      "SELECT id, name, quantity, unit_price FROM medicines WHERE id = ? FOR UPDATE",
       [medicineId],
     )
 
@@ -198,16 +206,117 @@ exports.dispenseMedicine = async (req, res) => {
       return res.status(400).json({ message: "Insufficient stock for the requested quantity" })
     }
 
+    const [[prescription]] = await connection.query(
+      `SELECT pr.id,
+              pr.patient_id,
+              uPat.name AS patient_name
+         FROM prescriptions pr
+         JOIN patients pat ON pat.id = pr.patient_id
+         JOIN users uPat ON uPat.id = pat.user_id
+        WHERE pr.id = ?
+        FOR UPDATE`,
+      [prescriptionId],
+    )
+
+    if (!prescription) {
+      await connection.rollback()
+      return res.status(404).json({ message: "Prescription not found" })
+    }
+
     await connection.query("UPDATE medicines SET quantity = quantity - ? WHERE id = ?", [
       quantityDispensed,
       medicineId,
     ])
+
+    const remainingStock = Math.max(parseNumber(medicine.quantity, 0) - quantityDispensed, 0)
+
+    const providedCharge = toPositiveCurrency(
+      req.body?.billAmount ??
+        req.body?.bill_amount ??
+        req.body?.charge_amount ??
+        req.body?.chargeAmount,
+    )
+    const unitPriceCurrency = toPositiveCurrency(medicine.unit_price)
+    let chargeAmount = providedCharge
+    if (chargeAmount === null && unitPriceCurrency !== null) {
+      chargeAmount = toPositiveCurrency(unitPriceCurrency * quantityDispensed)
+    }
+
+    if (chargeAmount === null) {
+      await connection.rollback()
+      return res.status(400).json({
+        message:
+          "Unable to determine a positive billing amount for this dispense. Please set a unit price or supply a bill amount.",
+      })
+    }
+
+    const descriptionLine =
+      req.body?.description ??
+      req.body?.description_line ??
+      req.body?.billing_description ??
+      (chargeAmount !== null
+        ? `Pharmacy charge: ${medicine.name} x${quantityDispensed} ($${chargeAmount.toFixed(2)}) for ${prescription.patient_name}`
+        : `Pharmacy charge: ${medicine.name} x${quantityDispensed} for ${prescription.patient_name}`)
+
+    const dueDateInput =
+      req.body?.billingDueDate ??
+      req.body?.billing_due_date ??
+      req.body?.dueDate ??
+      req.body?.due_date ??
+      null
 
     const [insertResult] = await connection.query(
       `INSERT INTO dispensing_records (prescription_id, medicine_id, quantity_dispensed, dispensed_by, dispensed_at)
        VALUES (?, ?, ?, ?, NOW())`,
       [prescriptionId, medicineId, quantityDispensed, dispenserId],
     )
+
+    let invoiceAction = null
+
+    const [invoiceRows] = await connection.query(
+      `SELECT id, amount, description
+         FROM invoices
+        WHERE patient_id = ?
+          AND status = 'pending'
+     ORDER BY created_at DESC
+        LIMIT 1
+        FOR UPDATE`,
+      [prescription.patient_id],
+    )
+
+    if (invoiceRows.length > 0) {
+      const invoice = invoiceRows[0]
+      const currentAmount = Number.parseFloat(invoice.amount) || 0
+      const updatedAmount = Number.parseFloat((currentAmount + chargeAmount).toFixed(2))
+      const combinedDescription = [invoice.description, descriptionLine].filter(Boolean).join("\n")
+
+      await connection.query("UPDATE invoices SET amount = ?, description = ? WHERE id = ?", [
+        updatedAmount,
+        combinedDescription || null,
+        invoice.id,
+      ])
+
+      invoiceAction = {
+        type: "updated",
+        invoiceId: invoice.id,
+        amountAppended: chargeAmount,
+        updatedTotal: updatedAmount,
+      }
+    } else {
+      const normalizedDueDate = dueDateInput && `${dueDateInput}`.trim() ? dueDateInput : null
+
+      const [newInvoiceResult] = await connection.query(
+        "INSERT INTO invoices (patient_id, amount, description, due_date, status, created_at) VALUES (?, ?, ?, ?, 'pending', NOW())",
+        [prescription.patient_id, chargeAmount, descriptionLine, normalizedDueDate],
+      )
+
+      invoiceAction = {
+        type: "created",
+        invoiceId: newInvoiceResult.insertId,
+        amountAppended: chargeAmount,
+        updatedTotal: chargeAmount,
+      }
+    }
 
     const [[record]] = await connection.query(
       `SELECT dr.id,
@@ -231,7 +340,20 @@ exports.dispenseMedicine = async (req, res) => {
 
     await connection.commit()
 
-    res.status(201).json({ message: "Medicine dispensed successfully", record })
+    const responseMessage =
+      invoiceAction?.type === "updated"
+        ? "Medicine dispensed and pending invoice updated"
+        : invoiceAction?.type === "created"
+          ? "Medicine dispensed and new invoice created"
+          : "Medicine dispensed successfully"
+
+    res.status(201).json({
+      message: responseMessage,
+      record,
+      invoiceAction,
+      remainingStock,
+      chargeAmount: chargeAmount ?? null,
+    })
   } catch (error) {
     if (connection) {
       try {

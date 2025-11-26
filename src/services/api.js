@@ -81,6 +81,7 @@ export const labAPI = {
   updateTestStatus: (id, status) => api.put(`/lab/tests/${id}`, { status }),
   uploadReport: (id, payload) => api.post(`/lab/tests/${id}/report`, payload),
   getLabReport: (id) => api.get(`/lab/tests/${id}/report`),
+  addTestCharge: (id, payload) => api.post(`/lab/tests/${id}/bill`, payload),
 }
 
 // Pharmacy endpoints
@@ -97,9 +98,10 @@ export const pharmacyAPI = {
 
 // Billing endpoints
 export const billingAPI = {
-  getInvoices: () => api.get("/billing/invoices"),
+  getInvoices: (params = {}) => api.get("/billing/invoices", { params }),
   getInvoiceById: (id) => api.get(`/billing/invoices/${id}`),
   createInvoice: (data) => api.post("/billing/invoices", data),
+  updateInvoice: (id, data) => api.patch(`/billing/invoices/${id}`, data),
   processPayment: (data) => api.post("/billing/payments", data),
   getPaymentHistory: () => api.get("/billing/payments"),
 }

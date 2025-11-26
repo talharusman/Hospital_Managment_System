@@ -26,6 +26,7 @@ import { TestRequestsPage } from "./pages/lab/TestRequestsPage"
 import { UploadReportsPage } from "./pages/lab/UploadReportsPage"
 import { CompletedReportsPage } from "./pages/lab/CompletedReportsPage"
 import { PatientRecordsPage } from "./pages/lab/PatientRecordsPage"
+import { LabBillingPage } from "./pages/lab/LabBillingPage"
 import { PharmacyLayout } from "./layouts/PharmacyLayout"
 import { PharmacyDashboard } from "./pages/pharmacy/PharmacyDashboard"
 import { MedicinesPage } from "./pages/pharmacy/MedicinesPage"
@@ -124,6 +125,7 @@ function App() {
             <Route path="dashboard" element={<LabDashboard />} />
             <Route path="tests" element={<TestRequestsPage />} />
             <Route path="upload-reports" element={<UploadReportsPage />} />
+            <Route path="billing" element={<LabBillingPage />} />
             <Route path="completed" element={<CompletedReportsPage />} />
             <Route path="patients" element={<PatientRecordsPage />} />
           </Route>
@@ -141,8 +143,6 @@ function App() {
             <Route path="medicines" element={<MedicinesPage />} />
             <Route path="dispensing" element={<DispensingPage />} />
             <Route path="low-stock" element={<LowStockAlertsPage />} />
-            <Route path="invoices" element={<InvoicesListPage />} />
-            <Route path="payments" element={<PaymentsPage />} />
           </Route>
 
           {/* Billing Routes */}

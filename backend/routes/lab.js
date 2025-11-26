@@ -12,5 +12,6 @@ router.post("/tests", labController.createTestRequest)
 router.put("/tests/:id", labController.updateTestStatus)
 router.post("/tests/:id/report", labController.uploadLabReport)
 router.get("/tests/:id/report", labController.getLabReport)
+router.post("/tests/:id/bill", labController.billTestRequest)
 
 module.exports = router

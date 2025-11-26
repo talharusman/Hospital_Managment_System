@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast"
 import { Plus, Edit2, Trash2, Search, Loader2, Hash, LineChart, UserRound, CalendarClock, X } from "lucide-react"
 
-import { pharmacyAPI, billingAPI } from "../../services/api"
+import { pharmacyAPI } from "../../services/api"
 import { LoadingSpinner } from "../../components/LoadingSpinner"
 import { ErrorAlert } from "../../components/ErrorAlert"
 
@@ -182,31 +182,45 @@ export const MedicinesPage = () => {
       return
     }
 
+    const unitPrice = normalizeCurrency(selectedMedicine.unit_price)
+    const amount = Number((unitPrice * quantity).toFixed(2))
+
+    if (!amount || Number.isNaN(amount) || amount <= 0) {
+      toast.error("Set a valid unit price before dispensing")
+      return
+    }
+
     const updatedQuantity = Math.max(currentStock - quantity, 0)
-    let dispenseCompleted = false
 
     try {
       setIsProcessingBilling(true)
 
-      await pharmacyAPI.dispenseMedicine({
+      const descriptionLine = `Pharmacy charge: ${selectedMedicine.name} x${quantity} ($${amount.toFixed(2)}) for ${match.prescription.patient_name}`
+
+      const { data } = await pharmacyAPI.dispenseMedicine({
         prescriptionId: match.prescription.id,
         medicineId: selectedMedicine.id,
         quantity,
+        billAmount: amount,
+        description: descriptionLine,
+        billingDueDate: draft.dueDate || null,
       })
 
-      dispenseCompleted = true
+      const invoiceAction = data?.invoiceAction
 
-      const unitPrice = normalizeCurrency(selectedMedicine.unit_price)
-      const amount = Number((unitPrice * quantity).toFixed(2))
+      const responseMessage =
+        data?.message ||
+        (invoiceAction?.type === "updated"
+          ? "Dispensed and updated pending invoice"
+          : invoiceAction?.type === "created"
+            ? "Dispensed and created new invoice"
+            : "Medicine dispensed successfully")
 
-      await billingAPI.createInvoice({
-        patient_id: match.prescription.patient_id,
-        amount,
-        description: `Pharmacy - ${selectedMedicine.name} x${quantity} for ${match.prescription.patient_name}`,
-        due_date: draft.dueDate || null,
-      })
+      toast.success(responseMessage)
 
-      toast.success("Dispensed and added to bill")
+      const remainingStock = Number.isFinite(data?.remainingStock)
+        ? data.remainingStock
+        : updatedQuantity
 
       setBillingDrafts((prev) => ({
         ...prev,
@@ -218,47 +232,15 @@ export const MedicinesPage = () => {
 
       setMedicines((prev) =>
         prev.map((medicine) =>
-          medicine.id === selectedMedicine.id
-            ? { ...medicine, quantity: updatedQuantity }
-            : medicine,
+          medicine.id === selectedMedicine.id ? { ...medicine, quantity: remainingStock } : medicine,
         ),
       )
 
-      setSelectedMedicine((prev) =>
-        prev
-          ? { ...prev, quantity: updatedQuantity }
-          : prev,
-      )
+      setSelectedMedicine((prev) => (prev ? { ...prev, quantity: remainingStock } : prev))
     } catch (err) {
-      if (dispenseCompleted) {
-        setMedicines((prev) =>
-          prev.map((medicine) =>
-            medicine.id === selectedMedicine.id
-              ? { ...medicine, quantity: updatedQuantity }
-              : medicine,
-          ),
-        )
-
-        setSelectedMedicine((prev) =>
-          prev
-            ? { ...prev, quantity: updatedQuantity }
-            : prev,
-        )
-
-        setBillingDrafts((prev) => ({
-          ...prev,
-          [match.key]: {
-            ...prev[match.key],
-            quantity: "",
-          },
-        }))
-      }
-
-      const fallbackMessage = dispenseCompleted
-        ? "Dispensed successfully, but billing failed. Please review the patient's invoice manually."
-        : "Failed to dispense and bill"
-
-      const message = err.response?.data?.message || fallbackMessage
+      const message =
+        err.response?.data?.message ||
+        "Failed to dispense and update invoice. No changes were applied."
       toast.error(message)
     } finally {
       setIsProcessingBilling(false)

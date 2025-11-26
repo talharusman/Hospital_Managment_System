@@ -11,6 +11,7 @@ router.get("/", billingController.getInvoices)
 router.get("/invoices", billingController.getInvoices)
 router.get("/invoices/:id", billingController.getInvoiceById)
 router.post("/invoices", billingController.createInvoice)
+router.patch("/invoices/:id", billingController.updateInvoice)
 
 // Payment routes
 router.get("/payments", billingController.getPayments)

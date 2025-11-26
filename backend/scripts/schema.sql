@@ -112,6 +112,9 @@ CREATE TABLE IF NOT EXISTS test_requests (
   test_type VARCHAR(255),
   description TEXT,
   status ENUM('pending', 'in-progress', 'completed', 'cancelled') DEFAULT 'pending',
+  billing_amount DECIMAL(10, 2) DEFAULT NULL,
+  billing_invoice_id INT DEFAULT NULL,
+  billed_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (patient_id) REFERENCES patients(id) ON DELETE CASCADE,
   FOREIGN KEY (doctor_id) REFERENCES doctors(id)
