@@ -384,7 +384,7 @@ export const StaffAppointments = () => {
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download = `staff-appointments-${new Date().toISOString().slice(0, 10)}.csv`
+      link.download = `perceptionist-appointments-${new Date().toISOString().slice(0, 10)}.csv`
       link.click()
       URL.revokeObjectURL(url)
       toast.success("Export ready")
@@ -831,7 +831,7 @@ export const StaffAppointments = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Internal notes</p>
-                    <span className="text-xs text-muted-foreground/80">Staff only</span>
+                    <span className="text-xs text-muted-foreground/80">Perceptionist only</span>
                   </div>
                   <textarea
                     value={noteDraft}

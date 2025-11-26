@@ -81,8 +81,8 @@ export const StaffLayout = () => {
               </div>
               {sidebarOpen && (
                 <div className="leading-tight">
-                  <p className="text-sm font-semibold tracking-wide">Hospital Staff</p>
-                  <p className="text-xs opacity-80">Operations Center</p>
+                  <p className="text-sm font-semibold tracking-wide">Perceptionist Portal</p>
+                  <p className="text-xs opacity-80">Front Desk Operations</p>
                 </div>
               )}
             </div>
@@ -147,8 +147,8 @@ export const StaffLayout = () => {
 
               <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 shadow-sm">
                 <div className="hidden text-right leading-tight sm:flex sm:flex-col sm:items-end">
-                  <p className="text-sm font-semibold text-foreground">{user?.name ?? "Staff"}</p>
-                  <p className="text-xs capitalize text-muted-foreground">{user?.role ?? "staff"}</p>
+                  <p className="text-sm font-semibold text-foreground">{user?.name ?? "Perceptionist"}</p>
+                  <p className="text-xs capitalize text-muted-foreground">{user?.role ?? "perceptionist"}</p>
                 </div>
                 <div
                   className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-semibold"

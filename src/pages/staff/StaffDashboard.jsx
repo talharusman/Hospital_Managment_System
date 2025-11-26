@@ -36,7 +36,7 @@ export const StaffDashboard = () => {
       const errorMsg = err.response?.data?.message || "Failed to load dashboard"
       setError(errorMsg)
       toast.error(errorMsg)
-      console.log("[v0] Staff Dashboard error:", err.message)
+      console.log("[v0] Perceptionist Dashboard error:", err.message)
     } finally {
       setLoading(false)
     }
@@ -70,7 +70,7 @@ export const StaffDashboard = () => {
   return (
     <div className="p-8 bg-background min-h-screen">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-foreground mb-2">Staff Dashboard</h1>
+        <h1 className="text-4xl font-bold text-foreground mb-2">Perceptionist Dashboard</h1>
         <p className="text-muted-foreground">Manage daily operations and patient flow</p>
       </div>
 

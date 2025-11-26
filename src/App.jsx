@@ -160,7 +160,7 @@ function App() {
             <Route path="payments" element={<PaymentsPage />} />
           </Route>
 
-          {/* Staff Routes */}
+          {/* Perceptionist Routes */}
           <Route
             path="/staff/*"
             element={
