@@ -77,17 +77,17 @@ export const PatientsPage = () => {
 
   const appointmentStatusBadge = (status) => {
     const value = status?.toLowerCase()
-    if (value === "completed") return "bg-(--status-completed-bg) text-(--status-completed-fg)"
-    if (value === "cancelled") return "bg-(--status-cancelled-bg) text-(--status-cancelled-fg)"
-    return "bg-(--pill-info-bg) text-(--pill-info-fg)"
+    if (value === "completed") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+    if (value === "cancelled") return "bg-destructive/15 text-destructive"
+    return "bg-primary/15 text-primary"
   }
 
   const prescriptionStatusBadge = (status) => {
     const value = status?.toLowerCase()
-    if (value === "completed") return "bg-(--status-completed-bg) text-(--status-completed-fg)"
-    if (value === "cancelled") return "bg-(--status-cancelled-bg) text-(--status-cancelled-fg)"
-    if (value === "expired") return "bg-(--status-pending-bg) text-(--status-pending-fg)"
-    return "bg-(--pill-info-bg) text-(--pill-info-fg)"
+    if (value === "completed") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+    if (value === "cancelled") return "bg-destructive/15 text-destructive"
+    if (value === "expired") return "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+    return "bg-primary/15 text-primary"
   }
 
   return (
@@ -138,7 +138,7 @@ export const PatientsPage = () => {
                     <p className="text-lg font-semibold text-foreground">{patient.name}</p>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground">Patient #{patient.id}</p>
                   </div>
-                  <span className="rounded-full bg-(--pill-info-bg) px-3 py-1 text-xs font-semibold uppercase tracking-wide text-(--pill-info-fg)">
+                  <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
                     {patient.completedAppointments ?? 0} visits
                   </span>
                 </div>

@@ -106,10 +106,10 @@ export const PrescriptionsPage = () => {
 
   const prescriptionStatusBadge = (status) => {
     const value = status?.toLowerCase()
-    if (value === "completed") return "bg-(--status-completed-bg) text-(--status-completed-fg)"
-    if (value === "cancelled") return "bg-(--status-cancelled-bg) text-(--status-cancelled-fg)"
-    if (value === "expired") return "bg-(--status-pending-bg) text-(--status-pending-fg)"
-    return "bg-(--pill-info-bg) text-(--pill-info-fg)"
+    if (value === "completed") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+    if (value === "cancelled") return "bg-destructive/15 text-destructive"
+    if (value === "expired") return "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+    return "bg-primary/15 text-primary"
   }
 
   if (loading) {
@@ -264,7 +264,7 @@ export const PrescriptionsPage = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-(--action-disabled-bg) disabled:text-(--action-disabled-foreground)"
+                  className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                 >
                   <Save size={20} /> {submitting ? "Saving..." : "Create Prescription"}
                 </button>
@@ -373,7 +373,7 @@ export const PrescriptionsPage = () => {
                     <li key={`${selectedPrescription.id}-${idx}`} className="rounded-xl border border-border/50 bg-background/60 p-4">
                       <div className="flex items-center justify-between">
                         <p className="text-base font-semibold text-foreground">{med.name}</p>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-(--pill-info-bg) px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-(--pill-info-fg)">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary">
                           <Pill size={12} /> Medication
                         </span>
                       </div>

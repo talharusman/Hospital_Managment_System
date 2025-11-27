@@ -126,7 +126,7 @@ export const AvailabilityPage = () => {
         <button
           onClick={handleSave}
           disabled={loading || saving}
-          className="mt-8 flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-(--action-disabled-bg) disabled:text-(--action-disabled-foreground)"
+          className="mt-8 flex items-center gap-2 rounded-lg bg-primary px-6 py-2 text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Save size={20} /> {saving ? "Saving..." : "Save Availability"}
         </button>

@@ -155,7 +155,7 @@ export const PharmacyDashboard = () => {
                   </p>
                 </div>
                 <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                  <span className="rounded-full bg-(--status-scheduled-bg) px-3 py-1 text-(--status-scheduled-fg)">
+                  <span className="rounded-full bg-primary/15 px-3 py-1 text-primary">
                     {record.quantity_dispensed} units
                   </span>
                   <span className="text-muted-foreground/70">
