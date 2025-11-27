@@ -96,7 +96,7 @@ export const LowStockAlertsPage = () => {
 
       {alerts.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-10 text-center shadow-sm">
-          <p className="text-lg font-semibold text-(--status-completed-fg)">All medicines meet the minimum stock level.</p>
+          <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">All medicines meet the minimum stock level.</p>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -106,7 +106,7 @@ export const LowStockAlertsPage = () => {
             return (
               <div key={alert.id} className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <div className="rounded-full bg-(--status-pending-bg) p-3 text-(--status-pending-fg)">
+                  <div className="rounded-full bg-amber-500/15 p-3 text-amber-600 dark:text-amber-400">
                     <AlertTriangle size={20} />
                   </div>
                   <div className="flex-1">
@@ -131,7 +131,7 @@ export const LowStockAlertsPage = () => {
                         <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Minimum</p>
                         <p className="text-base font-semibold text-foreground">{threshold}</p>
                       </div>
-                      <div className="rounded-xl bg-(--status-pending-bg) px-3 py-2 text-(--status-pending-fg)">
+                      <div className="rounded-xl bg-amber-500/15 px-3 py-2 text-amber-600 dark:text-amber-400">
                         <p className="text-xs uppercase tracking-wide">Short by</p>
                         <p className="text-base font-semibold">{shortage}</p>
                       </div>

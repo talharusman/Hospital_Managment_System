@@ -24,9 +24,9 @@ const formatStatus = (status) => {
 
 const statusTone = (status) => {
   const value = normalizeStatus(status)
-  if (value === "completed") return "bg-(--status-completed-bg) text-(--status-completed-fg)"
-  if (value === "pending") return "bg-(--status-pending-bg) text-(--status-pending-fg)"
-  if (value === "in-progress") return "bg-(--pill-info-bg) text-(--pill-info-fg)"
+  if (value === "completed") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+  if (value === "pending") return "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+  if (value === "in-progress") return "bg-primary/15 text-primary"
   return "bg-muted text-muted-foreground"
 }
 
@@ -180,7 +180,7 @@ export const CompletedReportsPage = () => {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-(--pill-info-bg) text-(--pill-info-fg)">
+                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
                       <FileText size={18} />
                     </span>
                     <div>
@@ -247,7 +247,7 @@ export const CompletedReportsPage = () => {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-(--pill-info-bg) text-(--pill-info-fg)">
+                  <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
                     <FileText size={22} />
                   </span>
                   <div>
@@ -365,7 +365,7 @@ export const CompletedReportsPage = () => {
                 disabled={!selectedReport.reportFilePath}
                 className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
                   selectedReport.reportFilePath
-                    ? "bg-(--action-success) text-(--action-success-foreground) hover:bg-(--action-success-hover)"
+                    ? "bg-emerald-500 text-white hover:bg-emerald-600"
                     : "cursor-not-allowed bg-muted text-muted-foreground"
                 }`}
               >

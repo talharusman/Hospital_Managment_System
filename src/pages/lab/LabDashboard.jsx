@@ -75,9 +75,9 @@ export const LabDashboard = () => {
 
   const statusTone = (status) => {
     const value = status?.toLowerCase()
-    if (value === "completed") return "bg-(--status-completed-bg) text-(--status-completed-fg)"
-    if (value === "pending") return "bg-(--status-pending-bg) text-(--status-pending-fg)"
-    if (value === "in-progress") return "bg-(--pill-info-bg) text-(--pill-info-fg)"
+    if (value === "completed") return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+    if (value === "pending") return "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+    if (value === "in-progress") return "bg-primary/15 text-primary"
     return "bg-muted text-muted-foreground"
   }
 

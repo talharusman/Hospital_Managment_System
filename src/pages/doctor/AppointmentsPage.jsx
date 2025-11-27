@@ -98,10 +98,10 @@ export const AppointmentsPage = () => {
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                     appt.status === "Scheduled"
-                      ? "bg-(--pill-info-bg) text-(--pill-info-fg)"
+                      ? "bg-primary/15 text-primary"
                       : appt.status === "Completed"
-                        ? "bg-(--status-completed-bg) text-(--status-completed-fg)"
-                        : "bg-(--status-cancelled-bg) text-(--status-cancelled-fg)"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "bg-destructive/15 text-destructive"
                   }`}
                 >
                   {appt.status}
@@ -175,10 +175,10 @@ export const AppointmentsPage = () => {
                 <span
                   className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                     selectedAppointment.status === "Scheduled"
-                      ? "bg-(--pill-info-bg) text-(--pill-info-fg)"
+                      ? "bg-primary/15 text-primary"
                       : selectedAppointment.status === "Completed"
-                        ? "bg-(--status-completed-bg) text-(--status-completed-fg)"
-                        : "bg-(--status-cancelled-bg) text-(--status-cancelled-fg)"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "bg-destructive/15 text-destructive"
                   }`}
                 >
                   {selectedAppointment.status}
@@ -190,7 +190,7 @@ export const AppointmentsPage = () => {
               {selectedAppointment.status !== "Completed" && (
                 <button
                   onClick={() => handleStatusUpdate(selectedAppointment.id, "Completed")}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-(--action-success) px-4 py-2 text-(--action-success-foreground) transition hover:bg-(--action-success-hover)"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-white transition hover:bg-emerald-600"
                 >
                   <CheckCircle size={18} /> Mark Complete
                 </button>
@@ -198,7 +198,7 @@ export const AppointmentsPage = () => {
               {selectedAppointment.status !== "Cancelled" && (
                 <button
                   onClick={() => handleStatusUpdate(selectedAppointment.id, "Cancelled")}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-(--action-danger) px-4 py-2 text-(--action-danger-foreground) transition hover:bg-(--action-danger-hover)"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-white transition hover:bg-red-600"
                 >
                   <XCircle size={18} /> Cancel Appointment
                 </button>
