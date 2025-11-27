@@ -280,27 +280,56 @@ exports.getUserById = async (req, res) => {
   }
 }
 
+const normalizeString = (value) => {
+  if (value === undefined || value === null) return null
+  const trimmed = String(value).trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+const normalizeEmail = (value) => {
+  const normalized = normalizeString(value)
+  return normalized ? normalized.toLowerCase() : null
+}
+
+const normalizeRole = (value) => {
+  const normalized = normalizeString(value)
+  if (!normalized) return null
+  return normalized.toLowerCase().replace(/\s+/g, "_")
+}
+
+const ADMIN_ALLOWED_ROLES_FOR_CREATE = new Set(["doctor", "lab_technician", "pharmacist", "staff"])
+
 exports.createUser = async (req, res) => {
   const { name, email, role, phone, password } = req.body
 
-  if (!name || !email || !role || !password) {
-    return res.status(400).json({ message: "Name, email, role, and password are required" })
+  const normalizedName = normalizeString(name)
+  const normalizedEmail = normalizeEmail(email)
+  const normalizedRole = normalizeRole(role)
+  const normalizedPhone = normalizeString(phone)
+  const normalizedPassword = typeof password === "string" ? password.trim() : ""
+
+  if (!normalizedName || !normalizedEmail || !normalizedRole || normalizedPassword.length < 6) {
+    return res.status(400).json({ message: "Name, email, role, and a password of at least 6 characters are required" })
+  }
+
+  if (!ADMIN_ALLOWED_ROLES_FOR_CREATE.has(normalizedRole)) {
+    return res.status(403).json({ message: "Admins can only register doctors, lab technicians, pharmacists, or staff" })
   }
 
   const connection = await getConnection()
 
   try {
-    const [existing] = await connection.query("SELECT id FROM users WHERE email = ?", [email])
+    const [existing] = await connection.query("SELECT id FROM users WHERE email = ?", [normalizedEmail])
 
     if (existing.length > 0) {
       return res.status(400).json({ message: "Email already in use" })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
+    const hashedPassword = await bcrypt.hash(normalizedPassword, 10)
 
     const [result] = await connection.query(
       "INSERT INTO users (name, email, role, phone, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
-      [name, email, role, phone || null, hashedPassword]
+      [normalizedName, normalizedEmail, normalizedRole, normalizedPhone, hashedPassword]
     )
 
     res.status(201).json({ id: result.insertId, message: "User created successfully" })
@@ -318,27 +347,48 @@ exports.updateUser = async (req, res) => {
   const connection = await getConnection()
 
   try {
+    const [[existingUser]] = await connection.query("SELECT role FROM users WHERE id = ? LIMIT 1", [id])
+
+    if (!existingUser) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    const currentRole = existingUser.role
+
     const updates = []
     const params = []
 
     if (name !== undefined) {
+      const normalizedName = normalizeString(name)
+      if (!normalizedName) {
+        return res.status(400).json({ message: "Name cannot be empty" })
+      }
       updates.push("name = ?")
-      params.push(name)
+      params.push(normalizedName)
     }
     if (email !== undefined) {
+      const normalizedEmail = normalizeEmail(email)
+      if (!normalizedEmail) {
+        return res.status(400).json({ message: "Invalid email" })
+      }
       updates.push("email = ?")
-      params.push(email)
+      params.push(normalizedEmail)
     }
     if (role !== undefined) {
-      updates.push("role = ?")
-      params.push(role)
+      const normalizedRole = normalizeRole(role)
+      if (normalizedRole && normalizedRole !== currentRole) {
+        return res.status(403).json({ message: "Role cannot be changed" })
+      }
     }
     if (phone !== undefined) {
       updates.push("phone = ?")
-      params.push(phone)
+      params.push(normalizeString(phone))
     }
     if (password) {
-      const hashedPassword = await bcrypt.hash(password, 10)
+      if (typeof password !== "string" || password.trim().length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" })
+      }
+      const hashedPassword = await bcrypt.hash(password.trim(), 10)
       updates.push("password = ?")
       params.push(hashedPassword)
     }

@@ -175,6 +175,7 @@ exports.updateAppointmentStatus = async (req, res) => {
   const userId = req.user?.id
   const appointmentId = req.params.id
   const incomingStatus = req.body.status?.toString().toLowerCase()
+  const labRequestPayload = req.body.labRequest
 
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" })
@@ -191,6 +192,7 @@ exports.updateAppointmentStatus = async (req, res) => {
   }
 
   let connection
+  let transactionStarted = false
 
   try {
     connection = await pool.getConnection()
@@ -200,17 +202,78 @@ exports.updateAppointmentStatus = async (req, res) => {
       return res.status(404).json({ message: "Doctor profile not found" })
     }
 
+    await connection.beginTransaction()
+    transactionStarted = true
+
+    const [[appointmentRow]] = await connection.query(
+      `SELECT id, patient_id
+         FROM appointments
+        WHERE id = ? AND doctor_id = ?
+        LIMIT 1`,
+      [appointmentId, doctorId],
+    )
+
+    if (!appointmentRow) {
+      await connection.rollback()
+      transactionStarted = false
+      return res.status(404).json({ message: "Appointment not found" })
+    }
+
     const [result] = await connection.query(
       "UPDATE appointments SET status = ? WHERE id = ? AND doctor_id = ?",
       [incomingStatus, appointmentId, doctorId],
     )
 
     if (result.affectedRows === 0) {
+      await connection.rollback()
+      transactionStarted = false
       return res.status(404).json({ message: "Appointment not found" })
     }
 
-    res.json({ message: "Appointment updated", status: formatStatus(incomingStatus) })
+    let labRequest = null
+
+    if (incomingStatus === "completed" && labRequestPayload) {
+      const rawTestType = labRequestPayload.testType
+      const rawNotes = labRequestPayload.notes
+      const rawPriority = labRequestPayload.priority
+
+      const testType = typeof rawTestType === "string" ? rawTestType.trim() : ""
+      const notes = typeof rawNotes === "string" ? rawNotes.trim() : null
+      const priority = typeof rawPriority === "string" ? rawPriority.trim().toLowerCase() : null
+
+      if (testType) {
+        const descriptionParts = []
+        if (notes) descriptionParts.push(notes)
+        if (priority) descriptionParts.push(`Priority: ${priority}`)
+        const description = descriptionParts.length ? descriptionParts.join("\n") : null
+
+        const [labInsert] = await connection.query(
+          `INSERT INTO test_requests (patient_id, doctor_id, test_type, description, status, created_at)
+           VALUES (?, ?, ?, ?, 'pending', NOW())`,
+          [appointmentRow.patient_id, doctorId, testType, description],
+        )
+
+        labRequest = {
+          id: labInsert.insertId,
+          testType,
+          description,
+          status: "Pending",
+        }
+      }
+    }
+
+    await connection.commit()
+    transactionStarted = false
+
+    res.json({ message: "Appointment updated", status: formatStatus(incomingStatus), labRequest })
   } catch (error) {
+    if (connection && transactionStarted) {
+      try {
+        await connection.rollback()
+      } catch (rollbackError) {
+        console.error("[doctorPortal] Failed to rollback transaction", rollbackError)
+      }
+    }
     console.error("[doctorPortal] Failed to update appointment", error)
     res.status(500).json({ message: "Failed to update appointment", error: error.message })
   } finally {

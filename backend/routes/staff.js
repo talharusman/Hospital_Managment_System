@@ -11,5 +11,7 @@ router.get("/appointments", staffController.getAppointments)
 router.put("/appointments/:id/status", staffController.updateAppointmentStatus)
 router.put("/appointments/:id/reschedule", staffController.rescheduleAppointment)
 router.get("/patients", staffController.getPatients)
+router.post("/patients", staffController.createPatient)
+router.put("/patients/:id", staffController.updatePatient)
 
 module.exports = router

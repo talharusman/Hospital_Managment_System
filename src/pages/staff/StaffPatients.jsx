@@ -11,6 +11,9 @@ import {
   X,
   Droplet,
   ShieldCheck,
+  UserPlus,
+  Pencil,
+  Lock,
 } from "lucide-react"
 import toast from "react-hot-toast"
 import { LoadingSpinner } from "../../components/LoadingSpinner"
@@ -42,6 +45,34 @@ const describeRecency = (value) => {
   return null
 }
 
+const emptyFormState = {
+  name: "",
+  email: "",
+  password: "",
+  phone: "",
+  gender: "",
+  dateOfBirth: "",
+  bloodType: "",
+  address: "",
+  emergencyContact: "",
+}
+
+const formatDateForInput = (value) => {
+  if (!value) return ""
+  const stringValue = String(value)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
+    return stringValue
+  }
+  if (stringValue.length >= 10) {
+    return stringValue.slice(0, 10)
+  }
+  const parsed = new Date(stringValue)
+  if (Number.isNaN(parsed.getTime())) {
+    return ""
+  }
+  return parsed.toISOString().slice(0, 10)
+}
+
 export const StaffPatients = () => {
   const [patients, setPatients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -51,6 +82,13 @@ export const StaffPatients = () => {
   const [recentOnly, setRecentOnly] = useState(false)
   const [selectedPatientId, setSelectedPatientId] = useState(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [formMode, setFormMode] = useState("create")
+  const [formData, setFormData] = useState(emptyFormState)
+  const [formErrors, setFormErrors] = useState({})
+  const [editingPatientId, setEditingPatientId] = useState(null)
+  const [submittingForm, setSubmittingForm] = useState(false)
+  const isCreateMode = formMode === "create"
 
   const themeFallbackVars = {
     "--appointment-card": "rgba(11, 19, 42, 0.08)",
@@ -152,6 +190,133 @@ export const StaffPatients = () => {
     }
   }
 
+  const openCreateForm = () => {
+    setFormMode("create")
+    setFormData(emptyFormState)
+    setFormErrors({})
+    setEditingPatientId(null)
+    setIsFormOpen(true)
+  }
+
+  const startEditPatient = (patient) => {
+    if (!patient) return
+    setFormMode("edit")
+    setFormErrors({})
+    setEditingPatientId(patient.id)
+    setFormData({
+      name: patient.name || "",
+      email: patient.email || "",
+      password: "",
+      phone: patient.phone || "",
+      gender: patient.gender ? patient.gender.toLowerCase() : "",
+      dateOfBirth: formatDateForInput(patient.dateOfBirth),
+      bloodType: patient.bloodType || "",
+      address: patient.address || "",
+      emergencyContact: patient.emergencyContact || "",
+    })
+    setIsFormOpen(true)
+  }
+
+  const handleEditSelectedPatient = () => {
+    if (!selectedPatient) return
+    closeDetails()
+    startEditPatient(selectedPatient)
+  }
+
+  const closeForm = () => {
+    setIsFormOpen(false)
+    setFormMode("create")
+    setFormData(emptyFormState)
+    setFormErrors({})
+    setEditingPatientId(null)
+  }
+
+  const handleFormChange = (event) => {
+    const { name, value } = event.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+    setFormErrors((prev) => {
+      if (!prev || !prev[name]) return prev
+      const next = { ...prev }
+      delete next[name]
+      return next
+    })
+  }
+
+  const handleFormSubmit = async (event) => {
+    event.preventDefault()
+
+    const errors = {}
+    const trimmedName = formData.name.trim()
+    const trimmedEmail = formData.email.trim().toLowerCase()
+
+    if (!trimmedName) {
+      errors.name = "Name is required"
+    }
+    if (!trimmedEmail) {
+      errors.email = "Email is required"
+    }
+
+    if (formMode === "create") {
+      const trimmedPassword = formData.password.trim()
+      if (trimmedPassword.length < 6) {
+        errors.password = "Password must be at least 6 characters"
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
+    setSubmittingForm(true)
+
+    const sanitize = (value) => (typeof value === "string" ? value.trim() : value)
+    const payload = {
+      name: trimmedName,
+      email: trimmedEmail,
+      phone: sanitize(formData.phone) || null,
+      gender: formData.gender || null,
+      dateOfBirth: formData.dateOfBirth || null,
+      bloodType: sanitize(formData.bloodType) || null,
+      address: sanitize(formData.address) || null,
+      emergencyContact: sanitize(formData.emergencyContact) || null,
+    }
+
+    if (formMode === "create") {
+      payload.password = formData.password.trim()
+    }
+
+    try {
+      let response
+      const fallbackId = editingPatientId
+
+      if (formMode === "create") {
+        response = await staffAPI.createPatient(payload)
+      } else {
+        if (!editingPatientId) {
+          throw new Error("Missing patient reference")
+        }
+        response = await staffAPI.updatePatient(editingPatientId, payload)
+      }
+
+      const createdOrUpdatedId = response?.data?.patient?.id || (formMode === "edit" ? fallbackId : null)
+
+      await fetchPatients({ silent: true })
+
+      if (createdOrUpdatedId) {
+        setSelectedPatientId(createdOrUpdatedId)
+      }
+
+      toast.success(formMode === "create" ? "Patient registered successfully" : "Patient details updated")
+      closeForm()
+    } catch (error) {
+      const message = error.response?.data?.message || error.message || "Failed to save patient"
+      toast.error(message)
+    } finally {
+      setSubmittingForm(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner />
   if (error) return <ErrorAlert message={error} onRetry={fetchPatients} />
 
@@ -168,7 +333,7 @@ export const StaffPatients = () => {
             Review registered patients, update contacts, and open their profiles in one place.
           </p>
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
           <div className="relative w-full sm:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -179,6 +344,14 @@ export const StaffPatients = () => {
               className="w-full rounded-full border border-border bg-background py-2 pl-9 pr-4 text-sm text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </div>
+          <button
+            type="button"
+            onClick={openCreateForm}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-500 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-600 transition hover:bg-emerald-500/15"
+          >
+            <UserPlus className="h-4 w-4" />
+            Register patient
+          </button>
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -290,14 +463,24 @@ export const StaffPatients = () => {
                 <h2 className="text-2xl font-semibold text-foreground">{selectedPatient.name || "Patient"}</h2>
                 <p className="text-sm text-muted-foreground">Profile overview</p>
               </div>
-              <button
-                type="button"
-                onClick={closeDetails}
-                className="rounded-full p-1 text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
-                aria-label="Close details"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleEditSelectedPatient}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-semibold text-foreground transition hover:border-primary hover:text-primary"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit details
+                </button>
+                <button
+                  type="button"
+                  onClick={closeDetails}
+                  className="rounded-full p-1 text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
+                  aria-label="Close details"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -384,6 +567,236 @@ export const StaffPatients = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4" onClick={closeForm}>
+          <div
+            className="w-full max-w-2xl rounded-3xl bg-card p-6 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {isCreateMode ? (
+                  <UserPlus className="h-10 w-10 rounded-2xl bg-emerald-500/10 p-2 text-emerald-500" />
+                ) : (
+                  <Pencil className="h-10 w-10 rounded-2xl bg-primary/10 p-2 text-primary" />
+                )}
+                <div>
+                  <h2 className="text-2xl font-semibold text-foreground">
+                    {isCreateMode ? "Register new patient" : "Edit patient profile"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {isCreateMode
+                      ? "Create a patient portal account and optionally capture contact details."
+                      : "Update patient contact, demographic, and emergency information."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeForm}
+                className="rounded-full p-1 text-muted-foreground transition hover:bg-muted/50 hover:text-foreground"
+                aria-label="Close patient form"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleFormSubmit} className="mt-6 space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="patient-name" className="text-sm font-medium text-foreground">
+                    Full name
+                  </label>
+                  <input
+                    id="patient-name"
+                    name="name"
+                    type="text"
+                    value={formData.name}
+                    onChange={handleFormChange}
+                    autoComplete="name"
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Jane Doe"
+                    disabled={submittingForm}
+                    required
+                  />
+                  {formErrors.name && <p className="mt-1 text-xs text-destructive">{formErrors.name}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="patient-email" className="text-sm font-medium text-foreground">
+                    Email address
+                  </label>
+                  <input
+                    id="patient-email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleFormChange}
+                    autoComplete="email"
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="patient@example.com"
+                    disabled={submittingForm}
+                    required
+                  />
+                  {formErrors.email && <p className="mt-1 text-xs text-destructive">{formErrors.email}</p>}
+                </div>
+
+                <div>
+                  <label htmlFor="patient-phone" className="text-sm font-medium text-foreground">
+                    Phone number
+                  </label>
+                  <input
+                    id="patient-phone"
+                    name="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={handleFormChange}
+                    autoComplete="tel"
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="+1 555 123 4567"
+                    disabled={submittingForm}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="patient-dob" className="text-sm font-medium text-foreground">
+                    Date of birth
+                  </label>
+                  <input
+                    id="patient-dob"
+                    name="dateOfBirth"
+                    type="date"
+                    value={formData.dateOfBirth}
+                    onChange={handleFormChange}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    disabled={submittingForm}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="patient-gender" className="text-sm font-medium text-foreground">
+                    Gender
+                  </label>
+                  <select
+                    id="patient-gender"
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleFormChange}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    disabled={submittingForm}
+                  >
+                    <option value="">Select gender</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="patient-blood" className="text-sm font-medium text-foreground">
+                    Blood type
+                  </label>
+                  <input
+                    id="patient-blood"
+                    name="bloodType"
+                    type="text"
+                    value={formData.bloodType}
+                    onChange={handleFormChange}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="e.g. O+"
+                    disabled={submittingForm}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="patient-address" className="text-sm font-medium text-foreground">
+                  Address
+                </label>
+                <textarea
+                  id="patient-address"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleFormChange}
+                  rows={3}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  placeholder="Street, City, State"
+                  disabled={submittingForm}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="patient-emergency" className="text-sm font-medium text-foreground">
+                    Emergency contact
+                  </label>
+                  <input
+                    id="patient-emergency"
+                    name="emergencyContact"
+                    type="text"
+                    value={formData.emergencyContact}
+                    onChange={handleFormChange}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    placeholder="Name & phone"
+                    disabled={submittingForm}
+                  />
+                </div>
+
+                {isCreateMode && (
+                  <div>
+                    <label htmlFor="patient-password" className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <Lock className="h-4 w-4 text-muted-foreground" />
+                      Temporary password
+                    </label>
+                    <input
+                      id="patient-password"
+                      name="password"
+                      type="password"
+                      value={formData.password}
+                      onChange={handleFormChange}
+                      autoComplete="new-password"
+                      className="mt-1 w-full rounded-xl border border-border bg-background px-4 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      placeholder="Minimum 6 characters"
+                      disabled={submittingForm}
+                      required
+                    />
+                    {formErrors.password ? (
+                      <p className="mt-1 text-xs text-destructive">{formErrors.password}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Share this password with the patient so they can log in.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  className="rounded-full border border-border px-4 py-2 text-sm font-semibold text-foreground transition hover:border-muted-foreground"
+                  disabled={submittingForm}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingForm}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground shadow transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/60"
+                >
+                  {submittingForm
+                    ? "Saving..."
+                    : isCreateMode
+                      ? "Register patient"
+                      : "Save changes"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -1,8 +1,69 @@
+const bcrypt = require("bcryptjs")
 const pool = require("../config/database")
 
 const toNumber = (value) => {
   const parsed = Number(value)
   return Number.isNaN(parsed) ? 0 : parsed
+}
+
+const normalizeString = (value) => {
+  if (value === undefined || value === null) return null
+  const trimmed = String(value).trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+const normalizeDate = (value) => {
+  const normalized = normalizeString(value)
+  if (!normalized) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    return normalized
+  }
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+  return parsed.toISOString().slice(0, 10)
+}
+
+const normalizeGender = (value) => {
+  const normalized = normalizeString(value)
+  if (!normalized) return null
+  const lower = normalized.toLowerCase()
+  return ["male", "female", "other"].includes(lower) ? lower : null
+}
+
+const PATIENT_BASE_QUERY = `SELECT p.id,
+                                   p.user_id            AS userId,
+                                   u.name               AS name,
+                                   u.email              AS email,
+                                   u.phone              AS userPhone,
+                                   p.phone              AS patientPhone,
+                                   p.gender             AS gender,
+                                   p.date_of_birth      AS dateOfBirth,
+                                   p.blood_type         AS bloodType,
+                                   p.address            AS address,
+                                   p.emergency_contact  AS emergencyContact,
+                                   p.created_at         AS registeredAt
+                              FROM patients p
+                              JOIN users u ON u.id = p.user_id`
+
+const mapPatientRow = (row = {}) => ({
+  id: row.id,
+  userId: row.userId,
+  name: row.name,
+  email: row.email,
+  phone: row.patientPhone || row.userPhone || null,
+  gender: row.gender,
+  dateOfBirth: row.dateOfBirth,
+  bloodType: row.bloodType,
+  address: row.address,
+  emergencyContact: row.emergencyContact,
+  registeredAt: row.registeredAt,
+})
+
+const fetchPatientById = async (connection, patientId) => {
+  const [rows] = await connection.query(`${PATIENT_BASE_QUERY} WHERE p.id = ? LIMIT 1`, [patientId])
+  return rows.length ? mapPatientRow(rows[0]) : null
 }
 
 exports.getDashboard = async (req, res) => {
@@ -321,34 +382,9 @@ exports.getPatients = async (req, res) => {
   try {
     connection = await pool.getConnection()
 
-    const [rows] = await connection.query(
-      `SELECT p.id,
-              u.name               AS name,
-              u.email              AS email,
-              p.phone              AS phone,
-              p.gender             AS gender,
-              p.date_of_birth      AS dateOfBirth,
-              p.blood_type         AS bloodType,
-              p.address            AS address,
-              p.emergency_contact  AS emergencyContact,
-              p.created_at         AS registeredAt
-         FROM patients p
-         JOIN users u ON u.id = p.user_id
-     ORDER BY u.name ASC`,
-    )
+    const [rows] = await connection.query(`${PATIENT_BASE_QUERY} ORDER BY u.name ASC`)
 
-    const patients = rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      phone: row.phone,
-      gender: row.gender,
-      dateOfBirth: row.dateOfBirth,
-      bloodType: row.bloodType,
-      address: row.address,
-      emergencyContact: row.emergencyContact,
-      registeredAt: row.registeredAt,
-    }))
+    const patients = rows.map(mapPatientRow)
 
     res.json({ patients })
   } catch (error) {
@@ -356,6 +392,191 @@ exports.getPatients = async (req, res) => {
       return res.json({ patients: [] })
     }
     res.status(500).json({ message: "Failed to load patients", error: error.message })
+  } finally {
+    if (connection) connection.release()
+  }
+}
+
+exports.createPatient = async (req, res) => {
+  let connection
+  let transactionStarted = false
+
+  try {
+    const {
+      name,
+      email,
+      password,
+      phone,
+      gender,
+      dateOfBirth,
+      address,
+      emergencyContact,
+      bloodType,
+    } = req.body || {}
+
+    const normalizedName = normalizeString(name)
+    const normalizedEmail = normalizeString(email)?.toLowerCase()
+    const normalizedPassword = typeof password === "string" ? password.trim() : ""
+
+    if (!normalizedName || !normalizedEmail || normalizedPassword.length < 6) {
+      return res.status(400).json({ message: "Name, email, and a password of at least 6 characters are required" })
+    }
+
+    connection = await pool.getConnection()
+    await connection.beginTransaction()
+    transactionStarted = true
+
+    const [existingUser] = await connection.query("SELECT id FROM users WHERE email = ? LIMIT 1", [normalizedEmail])
+    if (existingUser.length) {
+      await connection.rollback()
+      transactionStarted = false
+      return res.status(409).json({ message: "A user with this email already exists" })
+    }
+
+    const hashedPassword = await bcrypt.hash(normalizedPassword, 10)
+    const normalizedPhone = normalizeString(phone)
+    const normalizedGender = normalizeGender(gender)
+    const normalizedAddress = normalizeString(address)
+    const normalizedEmergency = normalizeString(emergencyContact)
+    const normalizedBloodType = normalizeString(bloodType)
+    const normalizedDateOfBirth = normalizeDate(dateOfBirth)
+
+    const [userInsert] = await connection.query(
+      "INSERT INTO users (email, password, name, role, phone, created_at) VALUES (?, ?, ?, 'patient', ?, NOW())",
+      [normalizedEmail, hashedPassword, normalizedName, normalizedPhone],
+    )
+
+    const userId = userInsert.insertId
+
+    const [patientInsert] = await connection.query(
+      `INSERT INTO patients (user_id, date_of_birth, gender, phone, address, emergency_contact, blood_type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        userId,
+        normalizedDateOfBirth,
+        normalizedGender,
+        normalizedPhone,
+        normalizedAddress,
+        normalizedEmergency,
+        normalizedBloodType,
+      ],
+    )
+
+    const patientId = patientInsert.insertId
+    const patient = await fetchPatientById(connection, patientId)
+
+    await connection.commit()
+    transactionStarted = false
+
+    res.status(201).json({ patient })
+  } catch (error) {
+    if (connection && transactionStarted) {
+      await connection.rollback()
+    }
+    res.status(500).json({ message: "Failed to register patient", error: error.message })
+  } finally {
+    if (connection) connection.release()
+  }
+}
+
+exports.updatePatient = async (req, res) => {
+  let connection
+  let transactionStarted = false
+
+  try {
+    const patientId = Number.parseInt(req.params.id, 10)
+    if (!Number.isInteger(patientId) || patientId <= 0) {
+      return res.status(400).json({ message: "Invalid patient id" })
+    }
+
+    const {
+      name,
+      email,
+      phone,
+      gender,
+      dateOfBirth,
+      address,
+      emergencyContact,
+      bloodType,
+    } = req.body || {}
+
+    const normalizedName = normalizeString(name)
+    const normalizedEmail = normalizeString(email)?.toLowerCase()
+    const normalizedPhone = normalizeString(phone)
+    const normalizedGender = normalizeGender(gender)
+    const normalizedAddress = normalizeString(address)
+    const normalizedEmergency = normalizeString(emergencyContact)
+    const normalizedBloodType = normalizeString(bloodType)
+    const normalizedDateOfBirth = normalizeDate(dateOfBirth)
+
+    if (!normalizedName || !normalizedEmail) {
+      return res.status(400).json({ message: "Name and email are required" })
+    }
+
+    connection = await pool.getConnection()
+
+    const [[existingPatient]] = await connection.query(
+      "SELECT user_id AS userId FROM patients WHERE id = ? LIMIT 1",
+      [patientId],
+    )
+
+    if (!existingPatient) {
+      return res.status(404).json({ message: "Patient not found" })
+    }
+
+    await connection.beginTransaction()
+    transactionStarted = true
+
+    const userId = existingPatient.userId
+
+    const [emailConflict] = await connection.query(
+      "SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1",
+      [normalizedEmail, userId],
+    )
+
+    if (emailConflict.length) {
+      await connection.rollback()
+      transactionStarted = false
+      return res.status(409).json({ message: "Another user already uses this email" })
+    }
+
+    await connection.query(
+      "UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?",
+      [normalizedName, normalizedEmail, normalizedPhone, userId],
+    )
+
+    await connection.query(
+      `UPDATE patients
+          SET date_of_birth = ?,
+              gender = ?,
+              phone = ?,
+              address = ?,
+              emergency_contact = ?,
+              blood_type = ?
+        WHERE id = ?
+        LIMIT 1`,
+      [
+        normalizedDateOfBirth,
+        normalizedGender,
+        normalizedPhone,
+        normalizedAddress,
+        normalizedEmergency,
+        normalizedBloodType,
+        patientId,
+      ],
+    )
+
+    const patient = await fetchPatientById(connection, patientId)
+
+    await connection.commit()
+    transactionStarted = false
+
+    res.json({ patient })
+  } catch (error) {
+    if (connection && transactionStarted) {
+      await connection.rollback()
+    }
+    res.status(500).json({ message: "Failed to update patient", error: error.message })
   } finally {
     if (connection) connection.release()
   }

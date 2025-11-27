@@ -2,40 +2,88 @@ const bcrypt = require("bcryptjs")
 const jwt = require("jsonwebtoken")
 const pool = require("../config/database")
 
-// Register User
+// Register User (patients only)
 exports.register = async (req, res) => {
+  let connection
+  let transactionStarted = false
   try {
-    const { email, password, name, role, phone } = req.body
+    const { email, password, name, phone, role: attemptedRole, patientProfile } = req.body
+    console.log("Register payload:", req.body)
 
-    if (!email || !password || !name || !role) {
+    const normalizeString = (value) => {
+      if (value === undefined || value === null) return null
+      const trimmed = String(value).trim()
+      return trimmed.length > 0 ? trimmed : null
+    }
+
+    const normalizedEmail = normalizeString(email)?.toLowerCase()
+    const normalizedPassword = typeof password === "string" ? password : null
+    const normalizedName = normalizeString(name)
+    if (!normalizedEmail || !normalizedPassword || !normalizedName) {
       return res.status(400).json({ message: "Missing required fields" })
     }
 
-    const normalizedEmail = email.trim().toLowerCase()
+    if (attemptedRole && attemptedRole !== "patient") {
+      return res.status(403).json({ message: "Self-registration is limited to patients" })
+    }
+    const normalizedPhone = normalizeString(phone)
 
-    const connection = await pool.getConnection()
+    connection = await pool.getConnection()
+    await connection.beginTransaction()
+    transactionStarted = true
 
-    // Check if user exists
     const [existingUser] = await connection.query("SELECT id FROM users WHERE email = ?", [normalizedEmail])
-
     if (existingUser.length > 0) {
-      connection.release()
+      await connection.rollback()
+      transactionStarted = false
       return res.status(400).json({ message: "User already exists" })
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create user
-    await connection.query(
+    const [userInsert] = await connection.query(
       "INSERT INTO users (email, password, name, role, phone, created_at) VALUES (?, ?, ?, ?, ?, NOW())",
-      [normalizedEmail, hashedPassword, name, role, phone || null],
+      [normalizedEmail, hashedPassword, normalizedName, "patient", normalizedPhone],
     )
 
-    connection.release()
-    res.status(201).json({ message: "User registered successfully" })
+    const userId = userInsert.insertId
+    const profile = typeof patientProfile === "object" && patientProfile !== null ? patientProfile : {}
+
+    const patientRecord = {
+      date_of_birth: normalizeString(profile.date_of_birth),
+      gender: normalizeString(profile.gender),
+      phone: normalizeString(profile.phone) || normalizedPhone,
+      address: normalizeString(profile.address),
+      emergency_contact: normalizeString(profile.emergency_contact),
+      blood_type: normalizeString(profile.blood_type),
+    }
+
+    await connection.query(
+      `INSERT INTO patients (user_id, date_of_birth, gender, phone, address, emergency_contact, blood_type, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        userId,
+        patientRecord.date_of_birth,
+        patientRecord.gender,
+        patientRecord.phone,
+        patientRecord.address,
+        patientRecord.emergency_contact,
+        patientRecord.blood_type,
+      ],
+    )
+
+    await connection.commit()
+    transactionStarted = false
+    res.status(201).json({ message: "Patient registered successfully" })
   } catch (error) {
+    if (connection && transactionStarted) {
+      await connection.rollback()
+    }
     res.status(500).json({ message: "Registration failed", error: error.message })
+  } finally {
+    if (connection) {
+      connection.release()
+    }
   }
 }
 

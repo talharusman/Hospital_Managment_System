@@ -9,10 +9,23 @@ import { adminAPI } from "../../services/api"
 const initialFormState = {
   name: "",
   email: "",
-  role: "patient",
+  role: "doctor",
   phone: "",
   password: "",
 }
+
+const CREATION_ROLE_OPTIONS = [
+  { value: "doctor", label: "Doctor" },
+  { value: "lab_technician", label: "Lab technician" },
+  { value: "pharmacist", label: "Pharmacist" },
+  { value: "staff", label: "Staff / Receptionist" },
+]
+
+const EXTENDED_ROLE_OPTIONS = [
+  ...CREATION_ROLE_OPTIONS,
+  { value: "patient", label: "Patient" },
+  { value: "admin", label: "Admin" },
+]
 
 export const ManageUsersPage = () => {
   const [users, setUsers] = useState([])
@@ -23,9 +36,27 @@ export const ManageUsersPage = () => {
   const [selectedUser, setSelectedUser] = useState(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [formData, setFormData] = useState(initialFormState)
+  const isCreateMode = !editingId
+
+  const roleOptions = (() => {
+    const base = [...CREATION_ROLE_OPTIONS]
+    if (!isCreateMode) {
+      const currentRole = formData.role
+      if (currentRole && !base.some((option) => option.value === currentRole)) {
+        const matching = EXTENDED_ROLE_OPTIONS.find((option) => option.value === currentRole)
+        base.push(
+          matching || {
+            value: currentRole,
+            label: currentRole.replace("_", " "),
+          },
+        )
+      }
+    }
+    return base
+  })()
 
   const resetForm = () => {
-    setFormData(initialFormState)
+    setFormData({ ...initialFormState })
   }
 
   const closeForm = () => {
@@ -70,20 +101,37 @@ export const ManageUsersPage = () => {
   const handleSubmit = async (event) => {
     event.preventDefault()
 
-    const payload = {
-      name: formData.name.trim(),
-      email: formData.email.trim().toLowerCase(),
-      role: formData.role,
-      phone: formData.phone.trim() || null,
-    }
+    const trimmedName = formData.name.trim()
+    const trimmedEmail = formData.email.trim().toLowerCase()
+    const trimmedPhone = (formData.phone || "").trim()
+    const trimmedPassword = formData.password.trim()
 
-    if (!editingId && !formData.password.trim()) {
-      toast.error("Password is required to create a user")
+    if (!trimmedName || !trimmedEmail) {
+      toast.error("Name and email are required")
       return
     }
 
-    if (formData.password.trim()) {
-      payload.password = formData.password.trim()
+    if (!editingId && trimmedPassword.length < 6) {
+      toast.error("Password must be at least 6 characters")
+      return
+    }
+
+    const payload = {
+      name: trimmedName,
+      email: trimmedEmail,
+      phone: trimmedPhone || null,
+    }
+
+    if (trimmedPassword) {
+      payload.password = trimmedPassword
+    }
+
+    if (isCreateMode) {
+      if (!roleOptions.some((option) => option.value === formData.role)) {
+        toast.error("Selected role is not permitted")
+        return
+      }
+      payload.role = formData.role
     }
 
     try {
@@ -111,7 +159,7 @@ export const ManageUsersPage = () => {
       setFormData({
         name: data.name || "",
         email: data.email || "",
-        role: data.role || "patient",
+        role: data.role || CREATION_ROLE_OPTIONS[0].value,
         phone: data.phone || "",
         password: "",
       })
@@ -292,19 +340,29 @@ export const ManageUsersPage = () => {
                   <label className="text-sm font-medium text-foreground" htmlFor="user-role">
                     Role
                   </label>
-                  <select
-                    id="user-role"
-                    value={formData.role}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, role: event.target.value }))}
-                    className="w-full rounded-md border border-border bg-background px-4 py-2 text-sm capitalize text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
-                    <option value="patient">Patient</option>
-                    <option value="doctor">Doctor</option>
-                    <option value="admin">Admin</option>
-                    <option value="staff">Staff</option>
-                    <option value="pharmacist">Pharmacist</option>
-                    <option value="lab_technician">Lab technician</option>
-                  </select>
+                  {isCreateMode ? (
+                    <>
+                      <select
+                        id="user-role"
+                        value={formData.role}
+                        onChange={(event) => setFormData((prev) => ({ ...prev, role: event.target.value }))}
+                        className="w-full rounded-md border border-border bg-background px-4 py-2 text-sm capitalize text-foreground shadow-sm transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        {roleOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-muted-foreground">
+                        Admins can register doctors, lab technicians, pharmacists, or staff accounts.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="h-10 rounded-md border border-dashed border-border bg-muted/40 px-4 text-sm font-medium capitalize text-muted-foreground flex items-center">
+                      {formData.role?.replace("_", " ") || "Unknown"}
+                    </div>
+                  )}
                 </div>
               </div>
 

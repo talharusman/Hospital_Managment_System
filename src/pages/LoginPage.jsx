@@ -218,6 +218,13 @@ export const LoginPage = () => {
             </Link>
           </div>
 
+          <div className="relative mt-2 text-center text-sm text-muted-foreground">
+            <span className="mr-1">New patient?</span>
+            <Link to="/register" className="font-semibold text-primary hover:underline">
+              Create an account
+            </Link>
+          </div>
+
           <div className="relative mt-8 space-y-4 rounded-3xl border border-border/40 bg-background/90 p-6 shadow-inner">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">Quick access</p>

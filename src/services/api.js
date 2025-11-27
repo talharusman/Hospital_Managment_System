@@ -48,7 +48,8 @@ export const doctorAPI = {
   getDashboard: () => api.get("/doctor/dashboard"),
   getAppointments: (filters = {}) => api.get("/doctor/appointments", { params: filters }),
   getAppointmentById: (id) => api.get(`/doctor/appointments/${id}`),
-  updateAppointmentStatus: (id, status) => api.put(`/doctor/appointments/${id}`, { status }),
+  updateAppointmentStatus: (id, status, labRequest) =>
+    api.put(`/doctor/appointments/${id}`, labRequest ? { status, labRequest } : { status }),
   getPrescriptions: () => api.get("/doctor/prescriptions"),
   createPrescription: (data) => api.post("/doctor/prescriptions", data),
   getPatients: () => api.get("/doctor/patients"),
@@ -113,6 +114,8 @@ export const staffAPI = {
   updateAppointmentStatus: (id, payload) => api.put(`/staff/appointments/${id}/status`, payload),
   rescheduleAppointment: (id, payload) => api.put(`/staff/appointments/${id}/reschedule`, payload),
   getPatients: () => api.get("/staff/patients"),
+  createPatient: (payload) => api.post("/staff/patients", payload),
+  updatePatient: (id, payload) => api.put(`/staff/patients/${id}`, payload),
 }
 
 export default api
